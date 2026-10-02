@@ -92,7 +92,10 @@ def train(
         train_rows, val_rows = split(rows, val_ratio, seed)
 
     tokenizer = AutoTokenizer.from_pretrained(base_model)
-    model = AutoModelForSequenceClassification.from_pretrained(base_model).to(dev)
+    # fp16 の重みでも fp32 で学習する (mDeBERTa は fp16 だと NaN が出やすい)
+    model = AutoModelForSequenceClassification.from_pretrained(base_model, dtype=torch.float32).to(
+        dev
+    )
     id2label = {int(k): v for k, v in model.config.id2label.items()}
     y_val = np.array([y for _, y in val_rows])
     z_before = predict_logits(model, tokenizer, val_rows, max_length, dev)

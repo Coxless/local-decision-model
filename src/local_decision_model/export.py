@@ -33,7 +33,7 @@ def export(model: str, out_dir: str | Path, fp16: bool = True) -> Path:
     tokenizer = AutoTokenizer.from_pretrained(model)
     # SDPA はトレース時に分岐が固定されるので、素直な eager attention で変換する
     hf_model = AutoModelForSequenceClassification.from_pretrained(
-        model, attn_implementation="eager"
+        model, attn_implementation="eager", dtype=torch.float32
     ).eval()
 
     example = tokenize(tokenizer, [("example state", "example question")], config.max_length, "pt")

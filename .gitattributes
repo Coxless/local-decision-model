@@ -1,0 +1,8 @@
+# 改行コードを LF に統一する (Windows で clone しても .workshop/*/hooks のシェルスクリプトが壊れないように)
+* text=auto eol=lf
+
+# バイナリ
+*.bin binary
+*.onnx binary
+*.safetensors binary
+*.model binary

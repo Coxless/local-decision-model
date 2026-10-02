@@ -29,7 +29,9 @@ class TorchScorer:
     ):
         self.device = resolve_device(device)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model)
+        # 重みが fp16 で配布されていても (mDeBERTa など) fp32 で読む。
+        # transformers 5 は既定で config の dtype に従うため明示する
+        self.model = AutoModelForSequenceClassification.from_pretrained(model, dtype=torch.float32)
         self.model.to(self.device).eval()
         self.id2label = {int(k): v for k, v in self.model.config.id2label.items()}
         self.max_length = max_length

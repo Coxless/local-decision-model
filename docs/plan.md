@@ -29,7 +29,7 @@ jev の「構造化出力専用の仕組み」と「較正された確率」を�
 NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CPU)
 ```
 
-- まだコミットもリモートもないので、最初に Git のリモート (GitHub の private リポジトリなど) を用意する。
+- Git のリモートは `github.com/Coxless/local-decision-model` (現在は public)。
 - `models/` は `.gitignore` 済み。NPU PC への転送は `scp` (Windows 標準の OpenSSH で受けられる)、
   共有フォルダ、zip のどれかで行う。IR は数百 MB なので Git には入れない。
 
@@ -77,18 +77,18 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 一番のリスクは「mDeBERTa が NPU でコンパイルできるか、十分速いか」なので最初に確かめる。
 
-**0-a. 開発 PC (Ubuntu, ワークショップ `gpu`)**
+**0-a. 開発 PC (Ubuntu, ワークショップ `gpu`)** — 完了。結果は [phase0-results.md](phase0-results.md)
 
-- [ ] 既存の CLI で mDeBERTa の `decide`、`bench` を GPU で試し、`export` で IR を作る (8×256 と 1×512)
-- [ ] `config.json` の `position_biased_input` が false か確認する
+- [x] 既存の CLI で mDeBERTa の `decide`、`bench` を GPU で試し、`export` で IR を作る (8×256 と 1×512)
+- [x] `config.json` の `position_biased_input` が false か確認する
       (false なら絶対位置の埋め込みがなく、位置の振り直しだけで質問同士の独立が成り立つ)
-- [ ] 6 GB の GPU で fp32 学習が回るか、小さな学習ループでピークメモリと速さを測る
+- [x] 6 GB の GPU で fp32 学習が回るか、小さな学習ループでピークメモリと速さを測る
       (単語埋め込みの凍結 + gradient checkpointing。見積もりは約 3〜4 GB)
-- [ ] (比較) 既存の 1 パス分類モデル GLiClass の多言語版を日本語の例題で試す
-- [ ] TypeSafe API との違いを洗い出す (フェーズ 6 の「互換にする範囲」を参照)。
+- [x] (比較) 既存の 1 パス分類モデル GLiClass の多言語版を日本語の例題で試す
+- [x] TypeSafe API との違いを洗い出す (フェーズ 6 の「互換にする範囲」を参照)。
       特に、jev の `instructions` は疑問文 (「〜ですか?」) で、NLI は平叙文の仮説を前提にしている点。
       疑問文のまま zero-shot でどれだけ精度が落ちるかを測る
-- [ ] Git のリモートを用意して push する。`.gitattributes` と `scripts/npu.ps1` もここで作る
+- [x] Git のリモートを用意して push する。`.gitattributes` と `scripts/npu.ps1` もここで作る
 
 **0-b. NPU PC (Windows, uv をそのまま使う)**
 

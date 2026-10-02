@@ -85,6 +85,9 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 - [ ] 6 GB の GPU で fp32 学習が回るか、小さな学習ループでピークメモリと速さを測る
       (単語埋め込みの凍結 + gradient checkpointing。見積もりは約 3〜4 GB)
 - [ ] (比較) 既存の 1 パス分類モデル GLiClass の多言語版を日本語の例題で試す
+- [ ] TypeSafe API との違いを洗い出す (フェーズ 6 の「互換にする範囲」を参照)。
+      特に、jev の `instructions` は疑問文 (「〜ですか?」) で、NLI は平叙文の仮説を前提にしている点。
+      疑問文のまま zero-shot でどれだけ精度が落ちるかを測る
 - [ ] Git のリモートを用意して push する。`.gitattributes` と `scripts/npu.ps1` もここで作る
 
 **0-b. NPU PC (Windows, uv をそのまま使う)**
@@ -178,6 +181,52 @@ ECE はペア方式と同等以下。
       (`distill` を追加し、`train` に `--arch packed` を追加)。
       README に Windows の NPU PC の手順 (ドライバ確認、uv、`scripts/npu.ps1`、モデルの転送) を追加する
 
+## フェーズ 6: ローカルサーバー (アプリから使えるようにする)
+
+Ollama のように、**常駐するローカルサーバーが NPU を持ち、アプリは HTTP で問い合わせる**形にする。
+API は独自に決めず、**TypeSafe (jev) の HTTP API と互換にする**。こうすると、アプリはベース URL を
+変えるだけで jev のクラウド、Ollaya などの互換サーバー、このサーバーを切り替えられる。
+TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`) で接続先を変えられる。
+
+**サーバーにする理由**
+
+- NPU はコンパイルに時間がかかる。常駐させれば、読み込みとコンパイルは起動時の 1 回で済む
+- どの言語のアプリからも使える。NPU を複数のアプリで共有できる (リクエストは順番に処理する)
+- Python の起動の遅さ (`transformers` の読み込みで数秒) が問題にならない
+
+**互換にする範囲** ([API リファレンス](https://docs.typesafe.ai/api.md)、2026-10-03 時点)
+
+| TypeSafe API | 対応 |
+|---|---|
+| `POST /v1/systemone`、本文は `state` / `model` / `questions` | 対応する。`model` は `local-s1-…` のような独自の名前にし、`jev-latest` などは既定のモデルの別名として受け付ける |
+| `state` が文字列 | そのまま使う |
+| `state` がオブジェクトや配列 | JSON 文字列にしてから状態テキストとして扱う (精度は要検証) |
+| `noul` (+ `criteria.true` / `false`) | 対応する。回答は `{"type": "noul", "noul": p}`。`criteria.true` があれば仮説文に使う |
+| `choice` (`criteria` は選択肢 → 説明、最大 255) | 対応する。回答は `choice` / `probabilities` / `confidence`。選択肢が多いときはパック方式を複数回に分けて推論する |
+| `score` (最大 10 段階の順序付きの水準) | 後から対応する。水準を choice として確率を出し、`score` = 確率で重み付けした平均、`legend` を付ける |
+| `instructions` がオブジェクトや配列 | 後から対応する。まずは文字列だけ |
+| `confidence` | ドキュメントの式に合わせる。choice は `(n·p_max − 1) / (n − 1)`、score は「最大の水準からの確率の広がり」を一様分布の広がりで割って 1 から引いたもの。公式の実装と同じか要確認 |
+| `usage` (`input_tokens` / `output_tokens`) | `input_tokens` はトークン数、`output_tokens` は 0 を返す |
+| モデル一覧 (SDK の `client.models.list()`) | 対応する。HTTP のパスは SDK のソースで要確認 |
+| エラー (`422`、`429` など) | `422` (検証エラー) は同じ形で返す。認証はなし (`Authorization` ヘッダーは無視する) |
+
+今の `schema.py` の `bool` 型と `{option}` テンプレートは、上の形 (`noul`、`criteria`) に寄せる。
+古い形式の YAML (`examples/*.yaml`) は、読み込み時に変換して受け付ける。
+
+- [ ] `src/local_s1/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込んで
+      NPU でコンパイルし、リクエストは 1 本のワーカーで順番に処理する。`decide.py` をそのまま呼ぶ
+- [ ] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --device NPU`)。
+      既定は localhost のみで待ち受け、外部には公開しない
+- [ ] `/health` (状態確認) を足す。起動直後のコンパイル中は「準備中」を返す
+- [ ] テスト: TypeSafe のドキュメントにあるリクエスト例をそのまま送り、同じ形の回答が返ること。
+      公式の Python SDK で `base_url` をこのサーバーに向けて呼べること
+- [ ] Windows: `scripts\npu.ps1 serve` で起動する。必要になったら、スタートアップへの登録や
+      Windows サービス化を検討する。`.workshop/*.yaml` にも `serve` の action を足す
+- [ ] (比較) Ollaya など TypeSafe 互換のローカルサーバーで小型の LLM 判断モデルを動かし、同じリクエストで
+      精度と速さを比べる
+- [ ] (任意) 配布しやすくしたくなったら、サーバーを Rust (OpenVINO の Rust バインディング + `tokenizers`)
+      の exe に置き換える。API が同じなのでアプリ側は変えなくてよい
+
 ## 未決事項
 
 1. **対象の分野**: 状態テキスト・質問セット・評価セットを作るため、どんな文章 (問い合わせ、ログ、
@@ -188,3 +237,7 @@ ECE はペア方式と同等以下。
    Hugging Face Hub の private リポジトリに置いて NPU PC から取得する方法も検討する。
 4. **Windows の NPU ドライバのバージョン**: OpenVINO の NPU プラグインは、ドライバ側のコンパイラに
    依存する。Windows のドライバのバージョンを記録し、動かなければ更新する。
+5. **サーバーのポート番号と起動方法**: Ollama (11434) などとぶつからない番号にする。
+   常駐の方法 (手動起動、スタートアップ、Windows サービス) は、使うアプリが決まってから決める。
+6. **疑問文の instructions への対応**: 学習データの質問を jev と同じ疑問文で書いて学習させるか、
+   疑問文を平叙文に変換するか。フェーズ 0 の測定結果を見て決める。

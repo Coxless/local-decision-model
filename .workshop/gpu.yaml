@@ -1,0 +1,56 @@
+# 開発 PC 用 (NVIDIA GPU): 学習・評価・OpenVINO IR へのエクスポートを行う。
+# リファレンス: https://ubuntu.com/workshop/docs/reference/definition-files/workshop-definition/
+#
+# - base / sdks を変更したら `workshop refresh gpu` で反映する
+# - actions の変更は refresh 不要 (即時反映)
+# - project-nvidia-gpu は .workshop/nvidia-gpu/ のプロジェクト内 SDK
+
+name: gpu
+base: ubuntu@24.04
+
+sdks:
+  - name: uv
+  - name: project-nvidia-gpu
+
+# `workshop run gpu -- <action> [引数...]` で実行する。
+# bash (errexit + pipefail) で実行され、プロジェクトは /project にマウントされる。
+actions:
+  setup: |
+    cd /project
+    uv sync --extra cuda --extra openvino
+
+  check: |
+    cd /project
+    nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+    uv run python -m local_s1 devices
+
+  test: |
+    cd /project
+    uv run pytest "$@"
+
+  lint: |
+    cd /project
+    uv run ruff check . "$@"
+    uv run ruff format --check .
+
+  fmt: |
+    cd /project
+    uv run ruff check --fix .
+    uv run ruff format .
+
+  # 例: workshop run gpu -- decide examples/review.yaml
+  decide: |
+    cd /project
+    uv run python -m local_s1 decide --backend torch --device cuda "$@"
+
+  train: |
+    cd /project
+    uv run python -m local_s1 train --device cuda "$@"
+
+  export: |
+    cd /project
+    uv run python -m local_s1 export "$@"
+
+  bench: |
+    cd /project
+    uv run python -m local_s1 bench --backend torch --device cuda "$@"

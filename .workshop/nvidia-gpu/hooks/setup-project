@@ -1,0 +1,9 @@
+# ワークショップ用の venv をプロジェクト外 (~/.venv) に置く。
+# /project/.venv はホストや他のワークショップと共有されてしまうため。
+if ! grep -q UV_PROJECT_ENVIRONMENT ~/.profile; then
+  cat <<'PROFILE' >> ~/.profile
+
+export UV_PROJECT_ENVIRONMENT="$HOME/.venv"
+export HF_HOME=/project/.cache/huggingface
+PROFILE
+fi

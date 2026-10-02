@@ -1,0 +1,44 @@
+# NPU 搭載 Intel PC (Core Ultra) 用: OpenVINO で NPU 推論を行う。
+# リファレンス: https://ubuntu.com/workshop/docs/reference/definition-files/workshop-definition/
+#
+# - base / sdks を変更したら `workshop refresh npu` で反映する
+# - actions の変更は refresh 不要 (即時反映)
+# - project-intel-npu は .workshop/intel-npu/ のプロジェクト内 SDK
+#   (NPU / GPU ユーザー空間ドライバのインストールと /dev/accel の受け渡し)
+
+name: npu
+base: ubuntu@24.04
+
+sdks:
+  - name: uv
+  - name: project-intel-npu
+
+# NPU (custom-device プラグ) は自動接続されない (connections に書いても接続されない)。
+# 初回の launch 後に一度だけ次を実行する:
+#   workshop connect npu/intel-npu:npu :custom-device
+
+actions:
+  setup: |
+    cd /project
+    uv sync --extra openvino
+
+  check: |
+    cd /project
+    if ! ls -l /dev/accel/ 2>/dev/null; then
+      echo "/dev/accel がありません。ホストで intel_vpu が読み込まれているか確認し、"
+      echo "ホストで 'workshop connect npu/intel-npu:npu :custom-device' を実行してください。"
+    fi
+    uv run python -m local_s1 devices
+
+  test: |
+    cd /project
+    uv run pytest "$@"
+
+  # 例: workshop run npu -- decide examples/review.yaml
+  decide: |
+    cd /project
+    uv run python -m local_s1 decide --backend openvino --device NPU "$@"
+
+  bench: |
+    cd /project
+    uv run python -m local_s1 bench --backend openvino --device NPU "$@"

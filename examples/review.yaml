@@ -1,0 +1,14 @@
+# decide / bench のリクエスト例。
+# state: 判断の材料になる自由テキスト
+# questions: 名前 → 質問。文字列だけなら bool (Noul)。
+state: |
+  この本は読んでいてとても楽しかった。登場人物が魅力的で、最後まで一気に読んでしまった。
+questions:
+  positive: The book review is positive.
+  recommends:
+    type: bool
+    instructions: 書き手はこの本を他人に勧めている。
+  genre:
+    type: choice
+    instructions: "This text is about {option}."
+    options: [a novel, a cookbook, a science textbook]

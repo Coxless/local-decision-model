@@ -1,0 +1,10 @@
+# プロジェクト内 SDK: ホストの NVIDIA GPU をワークショップに渡す。
+# gpu プラグは system SDK には付けられないため、SDK として定義している。
+# ドライバ (libcuda / nvidia-smi) はホストのものが自動で見える。CUDA ランタイムは PyTorch の wheel に同梱。
+name: nvidia-gpu
+summary: Host NVIDIA GPU access
+description: |
+  Exposes the host NVIDIA GPU to the workshop and sets up a per-workshop Python venv.
+plugs:
+  gpu:
+    interface: gpu

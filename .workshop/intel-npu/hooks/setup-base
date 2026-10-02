@@ -1,0 +1,29 @@
+# root で実行される。Intel NPU / GPU のユーザー空間ドライバを入れる。
+# 手順は https://github.com/intel/linux-npu-driver/releases に従う。
+# バージョンを上げるときは NPU_DRIVER_VERSION / NPU_DRIVER_BUILD を変えて `workshop refresh npu`。
+set -eu
+
+NPU_DRIVER_VERSION="${NPU_DRIVER_VERSION:-1.38.0}"
+NPU_DRIVER_BUILD="${NPU_DRIVER_BUILD:-20260910-34487311128}"
+TARBALL="linux-npu-driver-v${NPU_DRIVER_VERSION}.${NPU_DRIVER_BUILD}-ubuntu2404.tar.gz"
+
+apt-get update
+eatmydata apt-get install -y software-properties-common wget ca-certificates libtbb12
+
+# Level Zero ローダー (libze1) と Intel GPU 計算ランタイムは Intel の PPA から入れる。
+add-apt-repository -y ppa:kobuk-team/intel-graphics
+apt-get update
+eatmydata apt-get install -y libze1 libze-intel-gpu1 intel-opencl-icd clinfo
+
+if ! dpkg -s intel-level-zero-npu 2>/dev/null | grep -q "Version: ${NPU_DRIVER_VERSION}"; then
+  tmp=$(mktemp -d)
+  wget -q -O "$tmp/npu.tar.gz" \
+    "https://github.com/intel/linux-npu-driver/releases/download/v${NPU_DRIVER_VERSION}/${TARBALL}"
+  tar -xf "$tmp/npu.tar.gz" -C "$tmp"
+  # ファームウェア (intel-fw-npu) はホストのカーネルが読むものなので入れない。
+  dpkg -i "$tmp"/intel-driver-compiler-npu_*.deb "$tmp"/intel-level-zero-npu_*.deb
+  rm -rf "$tmp"
+fi
+
+# /dev/accel/accel* と /dev/dri/renderD* にアクセスできるようにする。
+usermod -aG render,video workshop

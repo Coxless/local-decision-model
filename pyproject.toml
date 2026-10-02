@@ -1,0 +1,42 @@
+[project]
+name = "local-s1"
+version = "0.1.0"
+description = "jev (System One model) ライクな型付き・確率付き判断モデルをローカル (CUDA / Intel NPU) で動かす"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "pyyaml>=6.0",
+    "transformers>=4.56",
+    "sentencepiece>=0.2",
+]
+
+[project.optional-dependencies]
+# 学習・PyTorch 推論 (NVIDIA GPU)。torch は CUDA 12.8 版を使う (GTX 1660 Ti = sm_75 対応)
+cuda = ["torch>=2.8"]
+# OpenVINO 推論 (Intel NPU / GPU / CPU) と IR エクスポート
+openvino = ["openvino>=2026.3"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.13"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", extra = "cuda" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[build-system]
+requires = ["uv_build>=0.8"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

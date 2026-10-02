@@ -1,0 +1,23 @@
+# Workshop: ロックファイルはリポジトリに含めてはいけない (定義 .workshop/*.yaml はコミットする)
+.workshop.lock
+
+# エディタ / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 言語別の生成物
+.venv/
+__pycache__/
+node_modules/
+target/
+dist/
+build/
+.env
+
+# このプロジェクト固有
+# Hugging Face キャッシュ (HF_HOME)
+.cache/
+# 学習済みモデル / OpenVINO IR (別 PC へは rsync などで転送する)
+models/

@@ -1,0 +1,14 @@
+# プロジェクト内 SDK: Intel NPU (/dev/accel/accel*) と Intel GPU をワークショップに渡し、
+# NPU / GPU のユーザー空間ドライバ (Level Zero) をインストールする。
+# カーネルドライバ (intel_vpu) とファームウェアはホスト側で用意しておくこと。
+name: intel-npu
+summary: Intel NPU access and user-space drivers
+description: |
+  Exposes the host Intel NPU (accel subsystem) and Intel GPU to the workshop,
+  installs the Intel NPU / GPU user-space drivers, and sets up a per-workshop Python venv.
+plugs:
+  gpu:
+    interface: gpu
+  npu:
+    interface: custom-device
+    subsystem: accel

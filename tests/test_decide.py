@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from local_s1.decide import Decider
-from local_s1.schema import Choice, Noul
-from local_s1.scoring import decision_logits
+from local_decision_model.decide import Decider
+from local_decision_model.schema import Choice, Noul
+from local_decision_model.scoring import decision_logits
 
 
 class FakeScorer:

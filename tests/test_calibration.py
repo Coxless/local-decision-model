@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from local_s1.calibration import expected_calibration_error, fit_temperature
+from local_decision_model.calibration import expected_calibration_error, fit_temperature
 
 
 def test_fit_temperature_recovers_true_temperature():

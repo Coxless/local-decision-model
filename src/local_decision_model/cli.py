@@ -1,4 +1,4 @@
-"""コマンドライン: python -m local_s1 <devices|decide|bench|train|export>
+"""コマンドライン: python -m local_decision_model <devices|decide|bench|train|export>
 
 torch / openvino はそれぞれの extra を入れたワークショップでしか使えないので、
 必要なときだけ import する。
@@ -119,7 +119,7 @@ def cmd_export(args) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="local_s1")
+    p = argparse.ArgumentParser(prog="local_decision_model")
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("devices", help="使えるデバイスを表示する").set_defaults(func=cmd_devices)

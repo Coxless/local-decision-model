@@ -28,7 +28,7 @@ actions:
       echo "/dev/accel がありません。ホストで intel_vpu が読み込まれているか確認し、"
       echo "ホストで 'workshop connect npu/intel-npu:npu :custom-device' を実行してください。"
     fi
-    uv run python -m local_s1 devices
+    uv run python -m local_decision_model devices
 
   test: |
     cd /project
@@ -37,8 +37,8 @@ actions:
   # 例: workshop run npu -- decide examples/review.yaml
   decide: |
     cd /project
-    uv run python -m local_s1 decide --backend openvino --device NPU "$@"
+    uv run python -m local_decision_model decide --backend openvino --device NPU "$@"
 
   bench: |
     cd /project
-    uv run python -m local_s1 bench --backend openvino --device NPU "$@"
+    uv run python -m local_decision_model bench --backend openvino --device NPU "$@"

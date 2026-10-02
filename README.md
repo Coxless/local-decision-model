@@ -1,4 +1,4 @@
-# local-s1: jev ライクな判断モデルを NPU で動かす
+# local-decision-model: jev ライクな判断モデルを NPU で動かす
 
 [TypeSafe の jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev)（System One model）と同じ考え方で、
 **「自由テキストの状態 + 名前付きの質問 → 型付き・較正された確率付きの回答」** を返す小さなモデルを
@@ -33,13 +33,13 @@
 ## 構成
 
 ```
-local-s1/
+local-decision-model/
 ├── .workshop/
 │   ├── gpu.yaml              # 開発 PC 用ワークショップ (CUDA)
 │   ├── npu.yaml              # NPU PC 用ワークショップ (OpenVINO)
 │   ├── nvidia-gpu/           # プロジェクト内 SDK: NVIDIA GPU を渡す
 │   └── intel-npu/            # プロジェクト内 SDK: NPU / Intel GPU を渡し、ドライバを入れる
-├── src/local_s1/
+├── src/local_decision_model/
 │   ├── schema.py             # 質問 (Noul / Choice) と回答の型
 │   ├── decide.py             # 状態 + 質問 → 回答
 │   ├── scoring.py            # トークナイズ、判断ロジット、s1.json
@@ -48,7 +48,7 @@ local-s1/
 │   ├── openvino_backend.py   # OpenVINO (NPU / GPU / CPU)
 │   ├── export.py             # PyTorch → OpenVINO IR
 │   ├── train.py              # ファインチューニング
-│   └── cli.py                # python -m local_s1 ...
+│   └── cli.py                # python -m local_decision_model ...
 ├── examples/review.yaml      # リクエスト例
 ├── data/sample.jsonl         # 学習データの形式例
 └── tests/
@@ -107,7 +107,7 @@ workshop run gpu -- export --model models/finetuned --out models/finetuned-ov
 ## NPU PC (Intel Core Ultra) での使い方
 
 ```bash
-git clone <このリポジトリ> && cd local-s1
+git clone <このリポジトリ> && cd local-decision-model
 workshop launch npu
 workshop connect npu/intel-npu:npu :custom-device   # 初回のみ (NPU は自動接続されない)
 workshop run npu -- setup      # uv sync --extra openvino
@@ -118,7 +118,7 @@ workshop run npu -- check      # /dev/accel と OpenVINO のデバイス一覧�
 
 ```bash
 # 開発 PC で
-rsync -av models/base-ov/ <npu-pc>:~/development/local-s1/models/base-ov/
+rsync -av models/base-ov/ <npu-pc>:~/development/local-decision-model/models/base-ov/
 ```
 
 ```bash

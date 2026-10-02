@@ -22,7 +22,7 @@ actions:
   check: |
     cd /project
     nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
-    uv run python -m local_s1 devices
+    uv run python -m local_decision_model devices
 
   test: |
     cd /project
@@ -41,16 +41,16 @@ actions:
   # 例: workshop run gpu -- decide examples/review.yaml
   decide: |
     cd /project
-    uv run python -m local_s1 decide --backend torch --device cuda "$@"
+    uv run python -m local_decision_model decide --backend torch --device cuda "$@"
 
   train: |
     cd /project
-    uv run python -m local_s1 train --device cuda "$@"
+    uv run python -m local_decision_model train --device cuda "$@"
 
   export: |
     cd /project
-    uv run python -m local_s1 export "$@"
+    uv run python -m local_decision_model export "$@"
 
   bench: |
     cd /project
-    uv run python -m local_s1 bench --backend torch --device cuda "$@"
+    uv run python -m local_decision_model bench --backend torch --device cuda "$@"

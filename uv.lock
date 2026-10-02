@@ -250,7 +250,7 @@ wheels = [
 ]
 
 [[package]]
-name = "local-s1"
+name = "local-decision-model"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -280,7 +280,7 @@ requires-dist = [
     { name = "openvino", marker = "extra == 'openvino'", specifier = ">=2026.3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "sentencepiece", specifier = ">=0.2" },
-    { name = "torch", marker = "extra == 'cuda'", specifier = ">=2.8", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "local-s1", extra = "cuda" } },
+    { name = "torch", marker = "extra == 'cuda'", specifier = ">=2.8", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "local-decision-model", extra = "cuda" } },
     { name = "transformers", specifier = ">=4.56" },
 ]
 provides-extras = ["cuda", "openvino"]

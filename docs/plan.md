@@ -104,8 +104,8 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 | ファイル | 内容 |
 |---|---|
-| `src/local_s1/packing.py` (新規) | 状態と質問から `input_ids`、`segment_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
-| `src/local_s1/packed_model.py` (新規) | `PackedDecider(nn.Module)`。`segment_ids` と `positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
+| `src/local_decision_model/packing.py` (新規) | 状態と質問から `input_ids`、`segment_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
+| `src/local_decision_model/packed_model.py` (新規) | `PackedDecider(nn.Module)`。`segment_ids` と `positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
 | `scoring.py` | `S1Config` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
 | `decide.py` | `Decider` に、パック方式のバックエンド (`decide(state, questions)` で直接答えを返す) の経路を追加 |
 
@@ -129,7 +129,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 教師は**ペア方式の mDeBERTa** にする。パック方式がペア方式の答えを 1 パスで再現するように蒸留する。
 大きな LLM の教師データは、あとから同じ形式で追加できる。
 
-- [ ] `src/local_s1/distill.py` (新規): 状態テキストと質問セットを入力に、既存の `TorchScorer` で
+- [ ] `src/local_decision_model/distill.py` (新規): 状態テキストと質問セットを入力に、既存の `TorchScorer` で
       教師の確率を付ける
 - [ ] データ形式を「1 行 = 1 つの状態 + 複数の質問」に変える。質問の書き方は `examples/*.yaml` と同じ
 
@@ -198,7 +198,7 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 
 | TypeSafe API | 対応 |
 |---|---|
-| `POST /v1/systemone`、本文は `state` / `model` / `questions` | 対応する。`model` は `local-s1-…` のような独自の名前にし、`jev-latest` などは既定のモデルの別名として受け付ける |
+| `POST /v1/systemone`、本文は `state` / `model` / `questions` | 対応する。`model` は `local-decision-model-…` のような独自の名前にし、`jev-latest` などは既定のモデルの別名として受け付ける |
 | `state` が文字列 | そのまま使う |
 | `state` がオブジェクトや配列 | JSON 文字列にしてから状態テキストとして扱う (精度は要検証) |
 | `noul` (+ `criteria.true` / `false`) | 対応する。回答は `{"type": "noul", "noul": p}`。`criteria.true` があれば仮説文に使う |
@@ -213,7 +213,7 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 今の `schema.py` の `bool` 型と `{option}` テンプレートは、上の形 (`noul`、`criteria`) に寄せる。
 古い形式の YAML (`examples/*.yaml`) は、読み込み時に変換して受け付ける。
 
-- [ ] `src/local_s1/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込んで
+- [ ] `src/local_decision_model/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込んで
       NPU でコンパイルし、リクエストは 1 本のワーカーで順番に処理する。`decide.py` をそのまま呼ぶ
 - [ ] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --device NPU`)。
       既定は localhost のみで待ち受け、外部には公開しない

@@ -1,6 +1,6 @@
 import pytest
 
-from local_s1.schema import BoolAnswer, Choice, ChoiceAnswer, Noul, parse_questions
+from local_decision_model.schema import BoolAnswer, Choice, ChoiceAnswer, Noul, parse_questions
 
 
 def test_parse_questions():

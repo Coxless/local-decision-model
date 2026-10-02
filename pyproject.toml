@@ -1,5 +1,5 @@
 [project]
-name = "local-s1"
+name = "local-decision-model"
 version = "0.1.0"
 description = "jev (System One model) ライクな型付き・確率付き判断モデルをローカル (CUDA / Intel NPU) で動かす"
 readme = "README.md"

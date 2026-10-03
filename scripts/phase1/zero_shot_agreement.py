@@ -18,7 +18,7 @@ import numpy as np
 import yaml
 
 from local_decision_model.schema import Choice, Noul
-from local_decision_model.scoring import DEFAULT_BASE_MODEL, S1Config
+from local_decision_model.scoring import DEFAULT_BASE_MODEL, InferenceConfig
 from local_decision_model.torch_backend import TorchPackedScorer, TorchScorer
 
 DATA = Path(__file__).parents[1] / "phase0" / "ja_eval.yaml"
@@ -98,7 +98,9 @@ def main() -> None:
 
     for marker in ("cls", "after"):
         for layout in ("shared", "expanded"):
-            packed.config = S1Config(arch="packed", marker_position=marker, choice_layout=layout)
+            packed.config = InferenceConfig(
+                arch="packed", marker_position=marker, choice_layout=layout
+            )
             print(f"\n== パック方式  marker_position={marker}  choice_layout={layout}")
             for col, kind in enumerate(NOUL_KINDS):
                 z, _ = collect(packed.score_questions, items, topics, col, "{option}")
@@ -124,7 +126,7 @@ def main() -> None:
     ms = bench(lambda: pair_score(it["state"], qs))
     print(f"  ペア方式: {ms:.1f} ms (8 ペアを 1 バッチ、長さ 256)")
     for layout in ("shared", "expanded"):
-        packed.config = S1Config(arch="packed", choice_layout=layout)
+        packed.config = InferenceConfig(arch="packed", choice_layout=layout)
         n = len(packed_lengths(packed, it["state"], qs))
         ms = bench(lambda: packed.score_questions(it["state"], qs))
         print(f"  パック方式 ({layout}): {ms:.1f} ms ({n} 回の推論)")

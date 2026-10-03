@@ -5,7 +5,7 @@ import pytest
 
 from local_decision_model.packing import pack, unpack
 from local_decision_model.schema import Choice, Noul
-from local_decision_model.scoring import S1Config
+from local_decision_model.scoring import InferenceConfig
 
 torch = pytest.importorskip("torch")
 
@@ -56,7 +56,7 @@ def model(base):
 
 def config(**kwargs):
     defaults = dict(arch="packed", lengths=[32, 64, 128], max_markers=8, max_state_tokens=24)
-    return S1Config(**{**defaults, **kwargs})
+    return InferenceConfig(**{**defaults, **kwargs})
 
 
 def score(model, state, questions, cfg):

@@ -11,7 +11,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from .packing import pack, unpack
 from .schema import Question
-from .scoring import Pair, S1Config, decision_logits, tokenize
+from .scoring import InferenceConfig, Pair, decision_logits, tokenize
 
 
 def resolve_device(device: str) -> torch.device:
@@ -56,11 +56,11 @@ class TorchScorer:
 class TorchPackedScorer:
     """パック方式。状態と質問を 1 本の系列に詰め、1 回 (入りきらなければ複数回) で推論する。"""
 
-    def __init__(self, model: str, device: str = "cuda", config: S1Config | None = None):
+    def __init__(self, model: str, device: str = "cuda", config: InferenceConfig | None = None):
         from .packed_model import PackedModel
 
         self.device = resolve_device(device)
-        self.config = config or S1Config(arch="packed")
+        self.config = config or InferenceConfig(arch="packed")
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         base = AutoModelForSequenceClassification.from_pretrained(model, dtype=torch.float32)
         self.model = PackedModel(base).to(self.device).eval()

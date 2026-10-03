@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .schema import Choice, Noul, Question
-from .scoring import S1Config
+from .scoring import InferenceConfig
 
 MarkerKey = tuple[str, int]  # (質問名, 選択肢の番号。noul は 0)
 
@@ -77,7 +77,7 @@ def _groups(encode, questions: dict[str, Question], choice_layout: str) -> list[
 class _Builder:
     """1 回分の系列を組み立てる。"""
 
-    def __init__(self, state_ids: list[int], config: S1Config, cls_id: int, sep_id: int):
+    def __init__(self, state_ids: list[int], config: InferenceConfig, cls_id: int, sep_id: int):
         self.config = config
         self.cls_id, self.sep_id = cls_id, sep_id
         self.state_len = len(state_ids)
@@ -145,7 +145,9 @@ class _Builder:
         )
 
 
-def pack(tokenizer, state: str, questions: dict[str, Question], config: S1Config) -> list[Pack]:
+def pack(
+    tokenizer, state: str, questions: dict[str, Question], config: InferenceConfig
+) -> list[Pack]:
     """状態と質問を、1 回以上の推論の入力にする。"""
     if config.max_state_tokens >= max(config.lengths):
         raise ValueError("max_state_tokens は lengths の最大値より小さくしてください")

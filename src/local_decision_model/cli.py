@@ -17,7 +17,7 @@ import yaml
 
 from .decide import Decider
 from .schema import parse_questions
-from .scoring import DEFAULT_BASE_MODEL, S1Config
+from .scoring import DEFAULT_BASE_MODEL, InferenceConfig
 
 DEFAULT_IR_DIR = "models/base-ov"
 
@@ -26,7 +26,7 @@ def make_scorer(args):
     """(scorer, 推論設定) を返す。"""
     if args.backend == "torch":
         model = args.model or DEFAULT_BASE_MODEL
-        config = S1Config.load(model) if Path(model).is_dir() else S1Config()
+        config = InferenceConfig.load(model) if Path(model).is_dir() else InferenceConfig()
         config.arch = args.arch or config.arch
         if config.arch == "packed":
             from .torch_backend import TorchPackedScorer
@@ -38,7 +38,7 @@ def make_scorer(args):
     from .openvino_backend import OpenVINOScorer
 
     model = args.model or DEFAULT_IR_DIR
-    config = S1Config.load(model)
+    config = InferenceConfig.load(model)
     if (args.arch or config.arch) == "packed":
         raise SystemExit("パック方式の OpenVINO 推論は未対応です (フェーズ 4)")
     return OpenVINOScorer(model, args.device, args.batch_size), config

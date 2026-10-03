@@ -11,7 +11,7 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from .openvino_backend import IR_FILE
-from .scoring import S1Config, tokenize
+from .scoring import InferenceConfig, tokenize
 
 
 class _LogitsOnly(torch.nn.Module):
@@ -28,7 +28,7 @@ class _LogitsOnly(torch.nn.Module):
 def export(model: str, out_dir: str | Path, fp16: bool = True) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    config = S1Config.load(model) if Path(model).is_dir() else S1Config()
+    config = InferenceConfig.load(model) if Path(model).is_dir() else InferenceConfig()
 
     tokenizer = AutoTokenizer.from_pretrained(model)
     # SDPA はトレース時に分岐が固定されるので、素直な eager attention で変換する

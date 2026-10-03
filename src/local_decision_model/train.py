@@ -24,7 +24,7 @@ from transformers import (
 )
 
 from .calibration import binary_metrics, fit_temperature
-from .scoring import Pair, S1Config, decision_logits, tokenize
+from .scoring import InferenceConfig, Pair, decision_logits, tokenize
 from .torch_backend import resolve_device
 
 Example = tuple[Pair, float]
@@ -139,7 +139,7 @@ def train(
     out_dir = Path(out_dir)
     model.save_pretrained(out_dir)
     tokenizer.save_pretrained(out_dir)
-    S1Config(
+    InferenceConfig(
         max_length=max_length, temperature_bool=temperature, temperature_choice=temperature
     ).save(out_dir)
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2) + "\n")

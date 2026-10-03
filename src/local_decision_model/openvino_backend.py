@@ -13,7 +13,7 @@ import numpy as np
 import openvino as ov
 from transformers import AutoTokenizer
 
-from .scoring import Pair, S1Config, decision_logits, tokenize
+from .scoring import InferenceConfig, Pair, decision_logits, tokenize
 
 IR_FILE = "model.xml"
 
@@ -36,7 +36,7 @@ class OpenVINOScorer:
             raise FileNotFoundError(
                 f"{model_dir / IR_FILE} がありません。GPU 側で `export` してから転送してください"
             )
-        self.max_length = S1Config.load(model_dir).max_length
+        self.max_length = InferenceConfig.load(model_dir).max_length
         self.batch_size = batch_size
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
         config = json.loads((model_dir / "config.json").read_text())

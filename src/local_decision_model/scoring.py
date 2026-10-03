@@ -21,7 +21,7 @@ Pair = tuple[str, str]  # (状態, 仮説)
 
 
 @dataclass
-class S1Config:
+class InferenceConfig:
     """モデルディレクトリに保存する推論設定。"""
 
     arch: str = "pair"  # "pair": (状態, 仮説) ごとに推論 / "packed": 1 本の系列に詰めて推論
@@ -36,7 +36,7 @@ class S1Config:
     choice_layout: str = "shared"  # "shared": 指示を共有 / "expanded": 選択肢ごとの仮説文
 
     @classmethod
-    def load(cls, model_dir: str | Path) -> S1Config:
+    def load(cls, model_dir: str | Path) -> InferenceConfig:
         path = Path(model_dir) / CONFIG_FILE
         if not path.exists():
             return cls()

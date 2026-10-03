@@ -108,7 +108,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 |---|---|
 | `src/local_decision_model/packing.py` (新規) | 状態と質問から `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
 | `src/local_decision_model/packed_model.py` (新規) | `PackedModel(nn.Module)`。`question_ids`、`option_ids`、`positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
-| `scoring.py` | `S1Config` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers`、`max_state_tokens`、`marker_position`、`choice_layout` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
+| `scoring.py` | `InferenceConfig` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers`、`max_state_tokens`、`marker_position`、`choice_layout` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
 | `decide.py` | `Decider` に、パック方式のバックエンド (`decide(state, questions)` で直接答えを返す) の経路を追加 |
 
 - マーカーは新しい語彙を足さず、既存のトークン (`[CLS]` など) に**学習可能な役割埋め込み**

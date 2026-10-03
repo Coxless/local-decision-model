@@ -3,7 +3,7 @@ import pytest
 
 from local_decision_model.packing import pack, unpack
 from local_decision_model.schema import Choice, Noul
-from local_decision_model.scoring import S1Config
+from local_decision_model.scoring import InferenceConfig
 
 CLS, SEP, PAD = 1, 2, 0
 
@@ -23,7 +23,7 @@ def ids(text):
 
 def config(**kwargs):
     defaults = dict(arch="packed", lengths=[16, 32, 64], max_markers=4, max_state_tokens=10)
-    return S1Config(**{**defaults, **kwargs})
+    return InferenceConfig(**{**defaults, **kwargs})
 
 
 def test_layout_noul_and_choice():

@@ -18,6 +18,7 @@
 # 変えるとき:
 #   - 概念を足す・名前を変える・コードの場所を移すときは、同じ変更の中でこのファイルも直す
 #   - aliases にある表記を既存のコードから消したら、aliases からも消す
+#   - docs/phase*-results.md は過去の記録なので、古い表記 (bool、S1Config、PackedDecider) のまま残す
 
 version: 1
 
@@ -79,9 +80,9 @@ concepts:
     layer: interface
     definition: 確率付きの真偽値で答える質問の型。instructions は「真のとき成り立つ文」。
     relations: {is_a: [question], contrasts_with: [choice]}
-    code: [local_decision_model.schema.Noul]
+    code: [local_decision_model.schema.Noul, local_decision_model.schema.NoulAnswer]
     external: {typesafe: noul}
-    aliases: ["bool (YAML の type: bool、BoolAnswer、temperature_bool)"]
+    note: 以前の形式 (YAML の type bool、s1.json の temperature_bool) は読み込みだけ受け付ける。
 
   choice:
     ja: choice
@@ -110,7 +111,6 @@ concepts:
     relations: {part_of: [question], produces: [hypothesis]}
     code: [local_decision_model.schema.Noul, local_decision_model.schema.Choice]
     external: {typesafe: "instructions (疑問文で書く)"}
-    aliases: [質問文]
 
   option:
     ja: 選択肢
@@ -138,7 +138,7 @@ concepts:
     relations: {uses: [probability]}
     code:
       - local_decision_model.schema.Answer
-      - local_decision_model.schema.BoolAnswer
+      - local_decision_model.schema.NoulAnswer
       - local_decision_model.schema.ChoiceAnswer
     external: {typesafe: "noul は {type, noul}、choice は {choice, probabilities, confidence}"}
 
@@ -169,7 +169,8 @@ concepts:
     relations: {part_of: [pair]}
     code: [local_decision_model.schema.Noul.hypotheses, local_decision_model.schema.Choice.hypotheses]
     external: {nli: hypothesis}
-    aliases: [仮説文, "学習データ (JSONL) の question フィールド"]
+    aliases: ["学習データ (JSONL) の question フィールド (フェーズ 2 で形式ごと変える)"]
+    note: 文字列そのものを指すときは「仮説文」と書いてよい。
 
   pair:
     ja: ペア
@@ -202,7 +203,7 @@ concepts:
     layer: inference
     definition: 判断ロジットを確率にするときの割る数 T。noul 用と choice 用を別々に持つ。
     relations: {part_of: [inference_config]}
-    code: [local_decision_model.scoring.S1Config, local_decision_model.decide.Decider]
+    code: [local_decision_model.scoring.InferenceConfig, local_decision_model.decide.Decider]
     aliases: [T]
 
   calibration:
@@ -227,7 +228,7 @@ concepts:
     layer: inference
     definition: 状態と質問をモデルにどう通すか。ペア方式かパック方式。
     relations: {part_of: [inference_config]}
-    code: [local_decision_model.scoring.S1Config]
+    code: [local_decision_model.scoring.InferenceConfig]
 
   pair_arch:
     ja: ペア方式
@@ -249,7 +250,7 @@ concepts:
     code:
       - local_decision_model.scoring.QuestionScorer
       - local_decision_model.torch_backend.TorchPackedScorer
-      - local_decision_model.packed_model.PackedDecider
+      - local_decision_model.packed_model.PackedModel
     note: OpenVINO での推論とエクスポートは未実装 (フェーズ 4)。
 
   scorer:
@@ -259,7 +260,7 @@ concepts:
     definition: 判断ロジットを返す部品。方式とバックエンドの組み合わせごとに 1 つある。
     relations: {produces: [decision_logit]}
     code: [local_decision_model.scoring.Scorer, local_decision_model.scoring.QuestionScorer]
-    note: PackedDecider は名前に反してこの層 (判断ロジットを返す nn.Module)。
+    note: PackedModel は scorer の中で使う nn.Module (TorchPackedScorer が包む)。
 
   decider:
     ja: decider
@@ -304,8 +305,8 @@ concepts:
     layer: inference
     definition: モデルディレクトリに保存する設定 (方式、温度、系列長、パック方式の設定)。
     relations: {part_of: [model_dir]}
-    code: [local_decision_model.scoring.S1Config, local_decision_model.scoring.CONFIG_FILE]
-    aliases: [s1.json, S1Config]
+    code: [local_decision_model.scoring.InferenceConfig, local_decision_model.scoring.CONFIG_FILE]
+    note: ファイル名は s1.json (転送済みのモデルディレクトリを読めるように変えていない)。
 
   ir:
     ja: IR
@@ -323,8 +324,7 @@ concepts:
     definition: パック方式の 1 回の推論の入力。固定長の整数配列 5 本と、マーカーの対応表からなる。
     relations: {uses: [state, question]}
     code: [local_decision_model.packing.Pack, local_decision_model.packing.pack, local_decision_model.packing.unpack]
-    aliases: ["回 (「1 回の推論」「次の回」)"]
-    note: 1 つのリクエストが入りきらないときは複数のパックに分かれる。
+    note: 1 つのリクエストが入りきらないときは複数のパックに分かれる。推論の実行回数は「1 回の推論」と書いてよい。
 
   marker:
     ja: マーカー
@@ -341,8 +341,7 @@ concepts:
     layer: packing
     definition: 1 つのパックに置けるマーカーの場所。数は max_markers で固定。
     relations: {part_of: [pack], uses: [marker]}
-    code: [local_decision_model.scoring.S1Config]
-    aliases: [slot]
+    code: [local_decision_model.scoring.InferenceConfig]
 
   group:
     ja: グループ
@@ -357,7 +356,7 @@ concepts:
     en: role
     layer: packing
     definition: トークンが状態・質問・選択肢のどれに属するか。学習可能な役割埋め込みで区別する。
-    code: [local_decision_model.packed_model.ROLES, local_decision_model.packed_model.PackedDecider]
+    code: [local_decision_model.packed_model.ROLES, local_decision_model.packed_model.PackedModel]
 
   position:
     ja: 位置番号
@@ -365,7 +364,7 @@ concepts:
     layer: packing
     definition: 相対位置の計算に使う番号。質問ごとに「状態のすぐ後ろ」から振り直す。マーカーは既定で 0。
     relations: {part_of: [pack]}
-    code: [local_decision_model.packing.Pack, local_decision_model.scoring.S1Config]
+    code: [local_decision_model.packing.Pack, local_decision_model.scoring.InferenceConfig]
 
   visibility:
     ja: 見える範囲
@@ -373,7 +372,7 @@ concepts:
     layer: packing
     definition: アテンションで参照してよい相手。状態は状態のみ、質問は状態と自分、選択肢は状態と親の質問と自分。
     relations: {produces: [question_independence]}
-    code: [local_decision_model.packed_model.PackedDecider.forward]
+    code: [local_decision_model.packed_model.PackedModel.forward]
     aliases: [マスク, アテンションマスク]
 
   question_independence:
@@ -390,7 +389,7 @@ concepts:
     layer: packing
     definition: 状態を max_state_tokens で固定長に切ること。質問の量で長さが変わらないようにする。
     relations: {uses: [state]}
-    code: [local_decision_model.scoring.S1Config, local_decision_model.packing.pack]
+    code: [local_decision_model.scoring.InferenceConfig, local_decision_model.packing.pack]
 
   choice_layout:
     ja: 詰め方
@@ -398,14 +397,14 @@ concepts:
     layer: packing
     definition: choice のパックへの置き方。shared は指示を共有し、expanded は選択肢ごとの仮説文を独立した質問として置く。
     relations: {uses: [choice, group]}
-    code: [local_decision_model.scoring.S1Config, local_decision_model.packing._groups]
+    code: [local_decision_model.scoring.InferenceConfig, local_decision_model.packing._groups]
 
   sequence_length:
     ja: 系列長
     en: sequence length
     layer: packing
     definition: 入力の固定長。NPU は動的形状が苦手なので、ペア方式は max_length、パック方式は lengths のうち収まる最短を使う。
-    code: [local_decision_model.scoring.S1Config]
+    code: [local_decision_model.scoring.InferenceConfig]
 
   # ----------------------------------------------------------------- training
   example:

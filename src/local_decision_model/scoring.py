@@ -26,7 +26,7 @@ class InferenceConfig:
 
     arch: str = "pair"  # "pair": (状態, 仮説) ごとに推論 / "packed": 1 本の系列に詰めて推論
     max_length: int = 256  # ペア方式の系列長
-    temperature_bool: float = 1.0
+    temperature_noul: float = 1.0
     temperature_choice: float = 1.0
     # 以下はパック方式 (packing.py)
     lengths: list[int] = field(default_factory=lambda: [128, 256, 512])
@@ -43,8 +43,10 @@ class InferenceConfig:
         data = json.loads(path.read_text())
         if "temperature" in data:  # 以前の形式: 温度は 1 つ
             temperature = data.pop("temperature")
-            data.setdefault("temperature_bool", temperature)
+            data.setdefault("temperature_noul", temperature)
             data.setdefault("temperature_choice", temperature)
+        if "temperature_bool" in data:  # 以前の形式: noul の温度が temperature_bool
+            data.setdefault("temperature_noul", data.pop("temperature_bool"))
         return cls(**data)
 
     def save(self, model_dir: str | Path) -> None:

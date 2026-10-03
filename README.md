@@ -21,7 +21,7 @@
                         │
      判断ロジット z = logit[entailment] - logit[contradiction]
                         │
-     bool  (Noul) : P = sigmoid(z / T)
+     noul         : P = sigmoid(z / T)
      choice       : 選択肢ごとの z を softmax(z / T)
 ```
 
@@ -138,8 +138,8 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 ```json
 {
   "answers": {
-    "positive":   {"type": "bool", "value": true, "probability": 0.97},
-    "recommends": {"type": "bool", "value": true, "probability": 0.81},
+    "positive":   {"type": "noul", "value": true, "probability": 0.97},
+    "recommends": {"type": "noul", "value": true, "probability": 0.81},
     "genre":      {"type": "choice", "value": "a novel",
                    "probabilities": {"a novel": 0.93, "a cookbook": 0.02, "a science textbook": 0.05}}
   },
@@ -178,4 +178,4 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 - 教師データ作り: 大きな LLM（[system-one-adapter](https://github.com/typesafe-ai/system-one-adapter-python) など）で
   状態と質問に確率を付けさせ、`train` で蒸留する。
 - INT8 量子化（NNCF）で NPU のレイテンシをさらに下げる。
-- 数値・リストなど bool / choice 以外の型。
+- 数値・リストなど noul / choice 以外の型。

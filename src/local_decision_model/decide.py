@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .schema import Answer, BoolAnswer, Choice, ChoiceAnswer, Noul, Question
+from .schema import Answer, Choice, ChoiceAnswer, Noul, NoulAnswer, Question
 from .scoring import Pair, QuestionScorer, Scorer
 
 
@@ -51,7 +51,7 @@ class Decider:
         for name, q in questions.items():
             zq = np.asarray(z[name], dtype=np.float64)
             if isinstance(q, Noul):
-                answers[name] = BoolAnswer(float(sigmoid(zq[0] / self.temperature)))
+                answers[name] = NoulAnswer(float(sigmoid(zq[0] / self.temperature)))
             elif isinstance(q, Choice):
                 probs = softmax(zq / self.temperature_choice)
                 answers[name] = ChoiceAnswer(

@@ -3,7 +3,7 @@ import pytest
 
 from local_decision_model.decide import Decider
 from local_decision_model.schema import Choice, Noul
-from local_decision_model.scoring import decision_logits
+from local_decision_model.scoring import CONFIG_FILE, InferenceConfig, decision_logits
 
 
 class FakeScorer:
@@ -18,7 +18,7 @@ class FakeScorer:
         return np.array([self.table[h] for _, h in pairs])
 
 
-def test_decide_bool_and_choice_in_one_call():
+def test_decide_noul_and_choice_in_one_call():
     scorer = FakeScorer({"positive": 2.0, "about a": 1.0, "about b": 1.0})
     answers = Decider(scorer).decide(
         "state", {"p": Noul("positive"), "c": Choice("about {option}", ("a", "b"))}
@@ -43,3 +43,13 @@ def test_decision_logits_nli():
 
 def test_decision_logits_binary():
     assert decision_logits(np.array([[1.0, 4.0]]), {0: "NO", 1: "YES"}) == pytest.approx([3.0])
+
+
+def test_config_reads_old_temperature_keys(tmp_path):
+    (tmp_path / CONFIG_FILE).write_text('{"temperature_bool": 2.0, "temperature_choice": 3.0}')
+    config = InferenceConfig.load(tmp_path)
+    assert (config.temperature_noul, config.temperature_choice) == (2.0, 3.0)
+
+    (tmp_path / CONFIG_FILE).write_text('{"temperature": 1.5}')
+    config = InferenceConfig.load(tmp_path)
+    assert (config.temperature_noul, config.temperature_choice) == (1.5, 1.5)

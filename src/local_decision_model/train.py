@@ -140,7 +140,7 @@ def train(
     model.save_pretrained(out_dir)
     tokenizer.save_pretrained(out_dir)
     InferenceConfig(
-        max_length=max_length, temperature_bool=temperature, temperature_choice=temperature
+        max_length=max_length, temperature_noul=temperature, temperature_choice=temperature
     ).save(out_dir)
     (out_dir / "train_report.json").write_text(json.dumps(report, indent=2) + "\n")
     return report

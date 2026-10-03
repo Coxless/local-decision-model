@@ -49,7 +49,7 @@ Question = Noul | Choice
 
 
 @dataclass(frozen=True)
-class BoolAnswer:
+class NoulAnswer:
     probability: float
 
     @property
@@ -57,7 +57,7 @@ class BoolAnswer:
         return self.probability >= 0.5
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "bool", "value": self.value, "probability": self.probability}
+        return {"type": "noul", "value": self.value, "probability": self.probability}
 
 
 @dataclass(frozen=True)
@@ -72,19 +72,22 @@ class ChoiceAnswer:
         return {"type": "choice", "value": self.value, "probabilities": self.probabilities}
 
 
-Answer = BoolAnswer | ChoiceAnswer
+Answer = NoulAnswer | ChoiceAnswer
 
 
 def parse_question(spec: str | dict[str, Any]) -> Question:
-    """YAML / JSON の 1 項目から質問を作る。文字列だけなら Noul とみなす。"""
+    """YAML / JSON の 1 項目から質問を作る。文字列だけなら Noul とみなす。
+
+    type は noul / choice。以前の形式の bool も noul として受け付ける。
+    """
     if isinstance(spec, str):
         return Noul(spec)
-    kind = spec.get("type", "bool")
-    if kind == "bool":
+    kind = spec.get("type", "noul")
+    if kind in ("noul", "bool"):
         return Noul(spec["instructions"])
     if kind == "choice":
         return Choice(spec["instructions"], tuple(spec["options"]))
-    raise ValueError(f"未知の質問タイプです: {kind!r} (bool / choice)")
+    raise ValueError(f"未知の質問タイプです: {kind!r} (noul / choice)")
 
 
 def parse_questions(specs: dict[str, Any]) -> dict[str, Question]:

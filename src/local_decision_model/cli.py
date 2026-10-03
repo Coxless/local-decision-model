@@ -46,7 +46,7 @@ def make_scorer(args):
 
 def make_decider(args) -> Decider:
     scorer, config = make_scorer(args)
-    return Decider(scorer, config.temperature_bool, config.temperature_choice)
+    return Decider(scorer, config.temperature_noul, config.temperature_choice)
 
 
 def load_request(path: str) -> tuple[str, dict]:

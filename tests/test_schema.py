@@ -1,18 +1,19 @@
 import pytest
 
-from local_decision_model.schema import BoolAnswer, Choice, ChoiceAnswer, Noul, parse_questions
+from local_decision_model.schema import Choice, ChoiceAnswer, Noul, NoulAnswer, parse_questions
 
 
 def test_parse_questions():
     qs = parse_questions(
         {
             "a": "It is raining.",
-            "b": {"type": "bool", "instructions": "It is sunny."},
+            "b": {"type": "noul", "instructions": "It is sunny."},
+            "old": {"type": "bool", "instructions": "It is sunny."},  # 以前の形式
             "c": {"type": "choice", "instructions": "About {option}.", "options": ["x", "y"]},
         }
     )
     assert qs["a"] == Noul("It is raining.")
-    assert qs["b"] == Noul("It is sunny.")
+    assert qs["b"] == qs["old"] == Noul("It is sunny.")
     assert qs["c"] == Choice("About {option}.", ("x", "y"))
 
 
@@ -33,5 +34,5 @@ def test_unknown_type():
 
 
 def test_answers():
-    assert BoolAnswer(0.7).to_dict() == {"type": "bool", "value": True, "probability": 0.7}
+    assert NoulAnswer(0.7).to_dict() == {"type": "noul", "value": True, "probability": 0.7}
     assert ChoiceAnswer({"x": 0.2, "y": 0.8}).value == "y"

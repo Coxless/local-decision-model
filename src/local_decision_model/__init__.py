@@ -1,6 +1,6 @@
 """jev (TypeSafe System One model) ライクな、型付き・確率付き判断モデルのローカル実装。"""
 
 from .decide import Decider
-from .schema import BoolAnswer, Choice, ChoiceAnswer, Noul
+from .schema import Choice, ChoiceAnswer, Noul, NoulAnswer
 
-__all__ = ["BoolAnswer", "Choice", "ChoiceAnswer", "Decider", "Noul"]
+__all__ = ["NoulAnswer", "Choice", "ChoiceAnswer", "Decider", "Noul"]

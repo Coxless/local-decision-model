@@ -63,7 +63,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 アテンション: 状態 → 状態のみ / 質問 → 状態 + 自分の質問 / 選択肢 → 状態 + 親の質問 + 自分
 相対位置:     各質問の位置番号を「状態のすぐ後ろ」から振り直す (マーカー [Q] / [O] は位置 0)
 出力:         [Q] と [O] の位置の隠れ状態 → NLI ヘッド → 判断ロジット z
-              bool: sigmoid(z / T_bool)    choice: softmax(z / T_choice)
+              noul: sigmoid(z / T_noul)    choice: softmax(z / T_choice)
 ```
 
 - **質問同士が干渉しない**: 位置番号の振り直しとマスクにより、ある質問の答えは他の質問の有無や
@@ -108,7 +108,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 |---|---|
 | `src/local_decision_model/packing.py` (新規) | 状態と質問から `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
 | `src/local_decision_model/packed_model.py` (新規) | `PackedModel(nn.Module)`。`question_ids`、`option_ids`、`positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
-| `scoring.py` | `InferenceConfig` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers`、`max_state_tokens`、`marker_position`、`choice_layout` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
+| `scoring.py` | `InferenceConfig` に `arch: "pair" \| "packed"`、`temperature_noul`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers`、`max_state_tokens`、`marker_position`、`choice_layout` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
 | `decide.py` | `Decider` に、パック方式のバックエンド (`decide(state, questions)` で直接答えを返す) の経路を追加 |
 
 - マーカーは新しい語彙を足さず、既存のトークン (`[CLS]` など) に**学習可能な役割埋め込み**
@@ -149,10 +149,10 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 ## フェーズ 3: 学習と較正
 
 - [ ] `train.py` にパック方式の学習を追加する
-  - bool はソフトラベルの BCE、choice は教師の分布とのクロスエントロピー
+  - noul はソフトラベルの BCE、choice は教師の分布とのクロスエントロピー
   - 単語埋め込みは凍結、fp32、gradient checkpointing、小さいバッチを勾配の累積で補う
   - 毎ステップ、質問の数 (1〜K)、質問の順番、選択肢の順番をランダムに変える
-- [ ] 較正: bool と choice で別々に温度を求めて `s1.json` に保存する。
+- [ ] 較正: noul と choice で別々に温度を求めて `s1.json` に保存する。
       評価指標は正解率、NLL、ECE (choice は最上位の答えの ECE)
 - [ ] 比較実験: 「状態は質問を見ない」版 (キャッシュできて独立) と「状態も質問を見る」版
       (精度は上がるかもしれないが質問同士が干渉する) を比べる。差が小さければ前者を採用する
@@ -212,7 +212,8 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 | モデル一覧 (SDK の `client.models.list()`) | 対応する。HTTP のパスは SDK のソースで要確認 |
 | エラー (`422`、`429` など) | `422` (検証エラー) は同じ形で返す。認証はなし (`Authorization` ヘッダーは無視する) |
 
-今の `schema.py` の `bool` 型と `{option}` テンプレートは、上の形 (`noul`、`criteria`) に寄せる。
+型名は `noul` にそろえた (以前の `bool` も読める)。回答の形と `{option}` テンプレートは、
+上の形 (`{"type": "noul", "noul": p}`、`criteria`) に寄せる。
 古い形式の YAML (`examples/*.yaml`) は、読み込み時に変換して受け付ける。
 
 - [ ] `src/local_decision_model/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込んで

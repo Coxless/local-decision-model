@@ -57,13 +57,13 @@ class TorchPackedScorer:
     """パック方式。状態と質問を 1 本の系列に詰め、1 回 (入りきらなければ複数回) で推論する。"""
 
     def __init__(self, model: str, device: str = "cuda", config: S1Config | None = None):
-        from .packed_model import PackedDecider
+        from .packed_model import PackedModel
 
         self.device = resolve_device(device)
         self.config = config or S1Config(arch="packed")
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         base = AutoModelForSequenceClassification.from_pretrained(model, dtype=torch.float32)
-        self.model = PackedDecider(base).to(self.device).eval()
+        self.model = PackedModel(base).to(self.device).eval()
 
     @torch.inference_mode()
     def score_questions(self, state: str, questions: dict[str, Question]) -> dict[str, np.ndarray]:

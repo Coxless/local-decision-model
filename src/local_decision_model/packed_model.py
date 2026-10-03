@@ -15,7 +15,7 @@ from .scoring import decision_logits
 ROLES = 3  # 状態 / 質問 / 選択肢
 
 
-class PackedDecider(nn.Module):
+class PackedModel(nn.Module):
     def __init__(self, model):
         """model は DebertaV2ForSequenceClassification。"""
         super().__init__()

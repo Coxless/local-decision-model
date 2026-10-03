@@ -11,7 +11,7 @@ torch = pytest.importorskip("torch")
 
 from transformers import DebertaV2Config, DebertaV2ForSequenceClassification  # noqa: E402
 
-from local_decision_model.packed_model import PackedDecider  # noqa: E402
+from local_decision_model.packed_model import PackedModel  # noqa: E402
 
 CLS, SEP, PAD = 1, 2, 0
 VOCAB = 200
@@ -51,7 +51,7 @@ def base():
 
 @pytest.fixture(scope="module")
 def model(base):
-    return PackedDecider(base).eval()
+    return PackedModel(base).eval()
 
 
 def config(**kwargs):
@@ -189,4 +189,4 @@ def test_rejects_position_biased_model():
         position_biased_input=True,
     )
     with pytest.raises(ValueError):
-        PackedDecider(DebertaV2ForSequenceClassification(config))
+        PackedModel(DebertaV2ForSequenceClassification(config))

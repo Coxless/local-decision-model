@@ -17,7 +17,7 @@
         │                                       │
         └──────── (状態, 仮説) のペア ─────────┘
                         │
-          多言語 NLI クロスエンコーダ (MiniLM L6, 約 1 億パラメータ)
+          多言語 NLI クロスエンコーダ (mDeBERTa-v3-base, 約 2.8 億パラメータ)
                         │
      判断ロジット z = logit[entailment] - logit[contradiction]
                         │
@@ -27,7 +27,7 @@
 
 - 文字列は生成しないので、出力が型から外れることはありません（jev と同じ方針）。
 - 温度 `T` は学習後に検証データで較正します（`train` が自動で行い `s1.json` に保存）。
-- ベースモデル: [`MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli`](https://huggingface.co/MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli)（MIT, 日本語対応）。学習しなくても zero-shot で動きます。
+- ベースモデル: [`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7)（MIT, 日本語対応）。学習しなくても zero-shot で動きます。
 - NPU は動的形状が苦手なので、入力を `[batch_size, max_length]`（既定 8 × 256）に固定してコンパイルします。
 
 ## 構成
@@ -44,6 +44,8 @@ local-decision-model/
 │   ├── decide.py             # 状態 + 質問 → 回答
 │   ├── scoring.py            # トークナイズ、判断ロジット、s1.json
 │   ├── calibration.py        # 温度較正・ECE
+│   ├── packing.py            # パック方式: 状態と質問を 1 本の系列に詰める
+│   ├── packed_model.py       # パック方式のモデル (1 回の推論で複数の質問に答える)
 │   ├── torch_backend.py      # PyTorch (CUDA / CPU)
 │   ├── openvino_backend.py   # OpenVINO (NPU / GPU / CPU)
 │   ├── export.py             # PyTorch → OpenVINO IR

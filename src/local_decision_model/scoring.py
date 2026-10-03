@@ -8,13 +8,13 @@ NLI モデル (entailment / neutral / contradiction) では z = logit[entailment
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 
-DEFAULT_BASE_MODEL = "MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli"
+DEFAULT_BASE_MODEL = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
 CONFIG_FILE = "s1.json"
 
 Pair = tuple[str, str]  # (状態, 仮説)
@@ -24,15 +24,28 @@ Pair = tuple[str, str]  # (状態, 仮説)
 class S1Config:
     """モデルディレクトリに保存する推論設定。"""
 
-    max_length: int = 256
-    temperature: float = 1.0
+    arch: str = "pair"  # "pair": (状態, 仮説) ごとに推論 / "packed": 1 本の系列に詰めて推論
+    max_length: int = 256  # ペア方式の系列長
+    temperature_bool: float = 1.0
+    temperature_choice: float = 1.0
+    # 以下はパック方式 (packing.py)
+    lengths: list[int] = field(default_factory=lambda: [128, 256, 512])
+    max_markers: int = 32
+    max_state_tokens: int = 384  # [CLS] と [SEP] を含む
+    marker_position: str = "cls"  # マーカーの位置番号。"cls": 0 / "after": 質問の先頭
+    choice_layout: str = "shared"  # "shared": 指示を共有 / "expanded": 選択肢ごとの仮説文
 
     @classmethod
     def load(cls, model_dir: str | Path) -> S1Config:
         path = Path(model_dir) / CONFIG_FILE
         if not path.exists():
             return cls()
-        return cls(**json.loads(path.read_text()))
+        data = json.loads(path.read_text())
+        if "temperature" in data:  # 以前の形式: 温度は 1 つ
+            temperature = data.pop("temperature")
+            data.setdefault("temperature_bool", temperature)
+            data.setdefault("temperature_choice", temperature)
+        return cls(**data)
 
     def save(self, model_dir: str | Path) -> None:
         path = Path(model_dir) / CONFIG_FILE
@@ -45,8 +58,14 @@ class Scorer(Protocol):
     def score(self, pairs: list[Pair]) -> np.ndarray: ...
 
 
-def decision_logits(logits: np.ndarray, id2label: dict[int, str]) -> np.ndarray:
-    """分類ロジット (N, num_labels) を判断ロジット (N,) にする。"""
+class QuestionScorer(Protocol):
+    """状態と質問から、質問名 → 判断ロジット (choice は選択肢の順) を直接返すもの (パック方式)。"""
+
+    def score_questions(self, state: str, questions: dict) -> dict[str, np.ndarray]: ...
+
+
+def decision_logits(logits, id2label: dict[int, str]):
+    """分類ロジット (N, num_labels) を判断ロジット (N,) にする。numpy でも torch でもよい。"""
     labels = {v.lower(): int(k) for k, v in id2label.items()}
     if logits.shape[-1] == 1:
         return logits[:, 0]

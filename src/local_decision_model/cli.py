@@ -23,17 +23,30 @@ DEFAULT_IR_DIR = "models/base-ov"
 
 
 def make_scorer(args):
-    """(scorer, 温度) を返す。"""
+    """(scorer, 推論設定) を返す。"""
     if args.backend == "torch":
-        from .torch_backend import TorchScorer
-
         model = args.model or DEFAULT_BASE_MODEL
         config = S1Config.load(model) if Path(model).is_dir() else S1Config()
-        return TorchScorer(model, args.device, config.max_length), config.temperature
+        config.arch = args.arch or config.arch
+        if config.arch == "packed":
+            from .torch_backend import TorchPackedScorer
+
+            return TorchPackedScorer(model, args.device, config), config
+        from .torch_backend import TorchScorer
+
+        return TorchScorer(model, args.device, config.max_length), config
     from .openvino_backend import OpenVINOScorer
 
     model = args.model or DEFAULT_IR_DIR
-    return OpenVINOScorer(model, args.device, args.batch_size), S1Config.load(model).temperature
+    config = S1Config.load(model)
+    if (args.arch or config.arch) == "packed":
+        raise SystemExit("パック方式の OpenVINO 推論は未対応です (フェーズ 4)")
+    return OpenVINOScorer(model, args.device, args.batch_size), config
+
+
+def make_decider(args) -> Decider:
+    scorer, config = make_scorer(args)
+    return Decider(scorer, config.temperature_bool, config.temperature_choice)
 
 
 def load_request(path: str) -> tuple[str, dict]:
@@ -64,8 +77,7 @@ def cmd_devices(_args) -> None:
 
 def cmd_decide(args) -> None:
     state, questions = load_request(args.request)
-    scorer, temperature = make_scorer(args)
-    decider = Decider(scorer, temperature)
+    decider = make_decider(args)
     start = time.perf_counter()
     answers = decider.decide(state, questions)
     elapsed = (time.perf_counter() - start) * 1000
@@ -76,8 +88,7 @@ def cmd_decide(args) -> None:
 
 def cmd_bench(args) -> None:
     state, questions = load_request(args.request)
-    scorer, temperature = make_scorer(args)
-    decider = Decider(scorer, temperature)
+    decider = make_decider(args)
     for _ in range(args.warmup):
         decider.decide(state, questions)
     times = []
@@ -138,6 +149,11 @@ def main(argv: list[str] | None = None) -> None:
             f"openvino: IR ディレクトリ (既定 {DEFAULT_IR_DIR})",
         )
         s.add_argument("--batch-size", type=int, default=8, help="openvino の静的バッチサイズ")
+        s.add_argument(
+            "--arch",
+            choices=["pair", "packed"],
+            help="pair: (状態, 仮説) ごとに推論 / packed: 1 本の系列に詰めて推論 (既定は s1.json)",
+        )
         s.set_defaults(func=func)
         if name == "bench":
             s.add_argument("--runs", type=int, default=100)

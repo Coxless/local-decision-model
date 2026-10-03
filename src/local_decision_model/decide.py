@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .schema import Answer, BoolAnswer, Choice, ChoiceAnswer, Noul, Question
-from .scoring import Pair, Scorer
+from .scoring import Pair, QuestionScorer, Scorer
 
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
@@ -18,11 +18,19 @@ def softmax(x: np.ndarray) -> np.ndarray:
 
 
 class Decider:
-    def __init__(self, scorer: Scorer, temperature: float = 1.0):
+    """scorer はペア方式 (Scorer) かパック方式 (QuestionScorer) のどちらか。"""
+
+    def __init__(
+        self,
+        scorer: Scorer | QuestionScorer,
+        temperature: float = 1.0,
+        temperature_choice: float | None = None,
+    ):
         self.scorer = scorer
         self.temperature = temperature
+        self.temperature_choice = temperature if temperature_choice is None else temperature_choice
 
-    def decide(self, state: str, questions: dict[str, Question]) -> dict[str, Answer]:
+    def _score_pairs(self, state: str, questions: dict[str, Question]) -> dict[str, np.ndarray]:
         # 全質問の仮説をまとめて 1 回で推論する
         pairs: list[Pair] = []
         spans: dict[str, slice] = {}
@@ -30,16 +38,22 @@ class Decider:
             hyps = q.hypotheses()
             spans[name] = slice(len(pairs), len(pairs) + len(hyps))
             pairs.extend((state, h) for h in hyps)
+        z = np.asarray(self.scorer.score(pairs))
+        return {name: z[span] for name, span in spans.items()}
 
-        z = np.asarray(self.scorer.score(pairs), dtype=np.float64) / self.temperature
+    def decide(self, state: str, questions: dict[str, Question]) -> dict[str, Answer]:
+        if hasattr(self.scorer, "score_questions"):
+            z = self.scorer.score_questions(state, questions)
+        else:
+            z = self._score_pairs(state, questions)
 
         answers: dict[str, Answer] = {}
         for name, q in questions.items():
-            zq = z[spans[name]]
+            zq = np.asarray(z[name], dtype=np.float64)
             if isinstance(q, Noul):
-                answers[name] = BoolAnswer(float(sigmoid(zq[0])))
+                answers[name] = BoolAnswer(float(sigmoid(zq[0] / self.temperature)))
             elif isinstance(q, Choice):
-                probs = softmax(zq)
+                probs = softmax(zq / self.temperature_choice)
                 answers[name] = ChoiceAnswer(
                     {o: float(p) for o, p in zip(q.options, probs, strict=True)}
                 )

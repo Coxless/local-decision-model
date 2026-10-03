@@ -57,11 +57,11 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 ```
 入力 (1 本の系列、長さは 128 / 256 / 512 のどれかに固定)
-[CLS] 状態… | [Q] 質問1 | [Q] 質問2 | [Q] choice の指示 [O] 選択肢A [O] 選択肢B | PAD
-  seg=0        seg=1       seg=2       seg=3              seg=4         seg=5
+[CLS] 状態… | [Q] 質問1 | [Q] 質問2 | choice の指示 [O] 選択肢A [O] 選択肢B | PAD
+  q=0          q=1         q=2         q=3          q=3, o=1      q=3, o=2
 
 アテンション: 状態 → 状態のみ / 質問 → 状態 + 自分の質問 / 選択肢 → 状態 + 親の質問 + 自分
-相対位置:     各質問の位置番号を「状態のすぐ後ろ」から振り直す
+相対位置:     各質問の位置番号を「状態のすぐ後ろ」から振り直す (マーカー [Q] / [O] は位置 0)
 出力:         [Q] と [O] の位置の隠れ状態 → NLI ヘッド → 判断ロジット z
               bool: sigmoid(z / T_bool)    choice: softmax(z / T_choice)
 ```
@@ -102,16 +102,18 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 ## フェーズ 1: パック入力とモデル
 
+完了。結果とプランから変えた点は [phase1-results.md](phase1-results.md)。
+
 | ファイル | 内容 |
 |---|---|
-| `src/local_decision_model/packing.py` (新規) | 状態と質問から `input_ids`、`segment_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
-| `src/local_decision_model/packed_model.py` (新規) | `PackedDecider(nn.Module)`。`segment_ids` と `positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
-| `scoring.py` | `S1Config` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
+| `src/local_decision_model/packing.py` (新規) | 状態と質問から `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index` と、マーカー → (質問, 選択肢) の対応表を作る。numpy だけで書く。長すぎるときは状態を切り詰め、マーカーが入りきらないときは複数回の推論に分ける |
+| `src/local_decision_model/packed_model.py` (新規) | `PackedDecider(nn.Module)`。`question_ids`、`option_ids`、`positions` からグラフ内でマスクと相対位置を作り、`embeddings` → `encoder` → マーカー位置の取り出し → NLI ヘッド、の順に通す |
+| `scoring.py` | `S1Config` に `arch: "pair" \| "packed"`、`temperature_bool`、`temperature_choice`、`lengths: [128, 256, 512]`、`max_markers`、`max_state_tokens`、`marker_position`、`choice_layout` を追加。`DEFAULT_BASE_MODEL` を mDeBERTa に変更 |
 | `decide.py` | `Decider` に、パック方式のバックエンド (`decide(state, questions)` で直接答えを返す) の経路を追加 |
 
 - マーカーは新しい語彙を足さず、既存のトークン (`[CLS]` など) に**学習可能な役割埋め込み**
   (状態 / 質問 / 選択肢) を足して区別する。単語埋め込みを凍結したまま学習できる。
-- マスクと相対位置をグラフ内で作るので、NPU に渡す入力は `[1, L]` の整数テンソル 3〜4 個で済む。
+- マスクと相対位置をグラフ内で作るので、NPU に渡す入力は `[1, L]` の整数テンソル 4 個と `marker_index` で済む。
 - DeBERTa は相対位置を対数のバケットに変換して使うので、自分で `relative_pos` を渡すときも
   その変換を通す。
 
@@ -161,7 +163,7 @@ ECE はペア方式と同等以下。
 ## フェーズ 4: エクスポートと NPU 推論
 
 - [ ] `export.py`: パック方式のモデルを OpenVINO IR に変換する
-      (入力は `input_ids`、`segment_ids`、`positions`、`marker_index`、出力は `logits[1, M]`)
+      (入力は `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index`、出力は `logits[1, M]`)
 - [ ] `openvino_backend.py`: 長さ 128 / 256 / 512 の 3 種類をコンパイルしてキャッシュし、
       入力に収まる一番短いものを選ぶ
 - [ ] テスト: 同じ入力に対して torch の CPU と OpenVINO の CPU で結果が一致すること
@@ -231,8 +233,8 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 
 1. **対象の分野**: 状態テキスト・質問セット・評価セットを作るため、どんな文章 (問い合わせ、ログ、
    レビューなど) に使うかを決める。未定なら汎用の日本語テキストと例題の質問で始める。
-2. **フェーズ 0 の結果**: NPU での速さは開発 PC では測れないので、NPU PC (Windows) の `bench` 結果を
-   見てからフェーズ 1 に進む。
+2. **フェーズ 0 の結果**: NPU での速さは開発 PC では測れない。NPU PC が手元にないため、0-b は後回しにして
+   フェーズ 1 を先に進めた。NPU で動かない場合は `packed_model.py` を作り直す。
 3. **モデルの転送方法**: `scp`、共有フォルダ、zip のどれにするか。何度も転送するようなら、
    Hugging Face Hub の private リポジトリに置いて NPU PC から取得する方法も検討する。
 4. **Windows の NPU ドライバのバージョン**: OpenVINO の NPU プラグインは、ドライバ側のコンパイラに

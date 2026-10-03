@@ -9,7 +9,9 @@ import numpy as np
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from .scoring import Pair, decision_logits, tokenize
+from .packing import pack, unpack
+from .schema import Question
+from .scoring import Pair, S1Config, decision_logits, tokenize
 
 
 def resolve_device(device: str) -> torch.device:
@@ -49,3 +51,25 @@ class TorchScorer:
                 logits = self.model(**enc).logits
             out.append(logits.float().cpu().numpy())
         return decision_logits(np.concatenate(out), self.id2label)
+
+
+class TorchPackedScorer:
+    """パック方式。状態と質問を 1 本の系列に詰め、1 回 (入りきらなければ複数回) で推論する。"""
+
+    def __init__(self, model: str, device: str = "cuda", config: S1Config | None = None):
+        from .packed_model import PackedDecider
+
+        self.device = resolve_device(device)
+        self.config = config or S1Config(arch="packed")
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        base = AutoModelForSequenceClassification.from_pretrained(model, dtype=torch.float32)
+        self.model = PackedDecider(base).to(self.device).eval()
+
+    @torch.inference_mode()
+    def score_questions(self, state: str, questions: dict[str, Question]) -> dict[str, np.ndarray]:
+        packs = pack(self.tokenizer, state, questions, self.config)
+        outputs = []
+        for p in packs:
+            inputs = {k: torch.from_numpy(v).to(self.device) for k, v in p.arrays().items()}
+            outputs.append(self.model(**inputs)[0].float().cpu().numpy())
+        return unpack(packs, outputs, questions)

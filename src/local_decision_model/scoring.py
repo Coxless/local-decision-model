@@ -79,7 +79,7 @@ def decision_logits(logits, id2label: dict[int, str]):
 def tokenize(tokenizer, pairs: list[Pair], max_length: int, tensors: str = "np"):
     """静的な形状 (max_length) にパディングする。NPU は動的形状が苦手なため常に固定長にする。
 
-    長すぎる場合は状態の側だけを切り詰め、質問文は残す。
+    長すぎる場合は状態の側だけを切り詰め、仮説は残す。
     """
     states = [s for s, _ in pairs]
     hypotheses = [h for _, h in pairs]

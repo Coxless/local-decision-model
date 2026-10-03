@@ -8,7 +8,8 @@
 - 位置番号は質問ごとに「状態のすぐ後ろ」から振り直す。選択肢は親の質問の後ろから振る
 - 状態の切り詰め長は ``max_state_tokens`` で固定する。他の質問の有無で状態の長さが変わると、
   質問同士が独立でなくなるため
-- 1 回に入りきらない質問や選択肢は、次の回の推論に回す (状態と choice の指示は回ごとに繰り返す)
+- 1 つのパックに入りきらない質問や選択肢は、次のパックに回す
+  (状態と choice の指示はパックごとに繰り返す)
 """
 
 from __future__ import annotations
@@ -177,7 +178,7 @@ def pack(tokenizer, state: str, questions: dict[str, Question], config: S1Config
                 builder.add_option(group, *options.pop(0))
             if not options:
                 break
-            # 残りの選択肢は次の回へ (指示は繰り返す)
+            # 残りの選択肢は次のパックへ (指示は繰り返す)
             packs.append(builder.build(tokenizer.pad_token_id))
             builder = new_builder()
     if builder.markers:
@@ -188,12 +189,12 @@ def pack(tokenizer, state: str, questions: dict[str, Question], config: S1Config
 def unpack(
     packs: list[Pack], outputs: list[np.ndarray], questions: dict[str, Question]
 ) -> dict[str, np.ndarray]:
-    """各回のマーカーごとの判断ロジットを、質問名 → ロジット (choice は選択肢の順) に戻す。"""
+    """各パックのマーカーごとの判断ロジットを、質問名 → ロジット (choice は選択肢の順) に戻す。"""
     z = {
         name: np.full(len(q.options) if isinstance(q, Choice) else 1, np.nan)
         for name, q in questions.items()
     }
     for p, out in zip(packs, outputs, strict=True):
-        for slot, (name, index) in enumerate(p.markers):
-            z[name][index] = out[slot]
+        for marker_slot, (name, index) in enumerate(p.markers):
+            z[name][index] = out[marker_slot]
     return z

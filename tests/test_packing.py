@@ -87,7 +87,7 @@ def test_split_by_markers_and_tokens():
     tok = FakeTokenizer()
     questions = {"c": Choice("q", tuple("abcdef")), "n": Noul("x")}
     packs = pack(tok, "s", questions, config())
-    # マーカー 4 個まで: 選択肢 4 個 / 残り 2 個 + noul。指示は回ごとに繰り返す
+    # マーカー 4 個まで: 選択肢 4 個 / 残り 2 個 + noul。指示はパックごとに繰り返す
     assert [p.markers for p in packs] == [
         [("c", 0), ("c", 1), ("c", 2), ("c", 3)],
         [("c", 4), ("c", 5), ("n", 0)],

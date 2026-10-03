@@ -36,7 +36,8 @@ def export(model: str, out_dir: str | Path, fp16: bool = True) -> Path:
         model, attn_implementation="eager", dtype=torch.float32
     ).eval()
 
-    example = tokenize(tokenizer, [("example state", "example question")], config.max_length, "pt")
+    pairs = [("example state", "example hypothesis")]
+    example = tokenize(tokenizer, pairs, config.max_length, "pt")
     names = ["input_ids", "attention_mask"]
     with torch.no_grad():
         ov_model = ov.convert_model(

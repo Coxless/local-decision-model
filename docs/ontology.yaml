@@ -1,0 +1,519 @@
+# local-decision-model のオントロジー (概念と用語の唯一の正)。
+#
+# コードとドキュメントで使う概念を 1 か所で定義し、互いの関係と、コード上の対応する場所を示す。
+# 新しく書く文章・識別子は、ここの ja / en の表記に合わせる。
+#
+# 項目:
+#   ja / en     正とする表記 (ja はドキュメントとコメント、en は識別子)
+#   definition  定義。1〜2 文
+#   layer       interface / inference / packing / training / environment
+#   relations   他の概念との関係 (下の relation_types のどれか → 概念 ID のリスト)
+#   code        対応するコード (Python のドット表記)。型や関数がない概念は省く
+#   files       対応するコード以外のファイル
+#   external    外部の語彙での呼び名 (typesafe: TypeSafe の System One API / nli: NLI の用語)
+#   aliases     いまコードやドキュメントに残っている別の表記。新しくは書かない
+#   status      planned = プランにあるが未実装。省略時は実装済み
+#   note        混同しやすい点
+#
+# 変えるとき:
+#   - 概念を足す・名前を変える・コードの場所を移すときは、同じ変更の中でこのファイルも直す
+#   - aliases にある表記を既存のコードから消したら、aliases からも消す
+
+version: 1
+
+relation_types:
+  is_a: 種類である (A は B の一種)
+  part_of: 一部である (A は B を構成する)
+  uses: 入力や材料として使う
+  produces: 作り出す
+  contrasts_with: 対になる (どちらか一方を選ぶ、または比べる)
+
+layers:
+  interface: 利用者から見える入出力 (状態、質問、回答)
+  inference: 判断ロジットから確率までの計算と、それを担う部品
+  packing: パック方式の系列の組み立て
+  training: 学習・蒸留・評価
+  environment: PC、ワークショップ、開発の進め方
+
+concepts:
+  # ---------------------------------------------------------------- interface
+  request:
+    ja: リクエスト
+    en: request
+    layer: interface
+    definition: 1 つの状態と、名前付きの質問の集まり。1 回の decide の入力。
+    code: [local_decision_model.cli.load_request]
+    files: [examples/review.yaml]
+    external: {typesafe: "POST /v1/systemone の本文 (state / model / questions)"}
+
+  state:
+    ja: 状態
+    en: state
+    layer: interface
+    definition: 判断の材料になる自由テキスト。質問はすべてこの状態について答える。
+    relations: {part_of: [request]}
+    external: {typesafe: "state (オブジェクトや配列も可。ここでは文字列のみ)", nli: premise}
+    note: パック方式では状態のトークンは質問を見ない (question_ids が 0)。
+
+  question:
+    ja: 質問
+    en: question
+    layer: interface
+    definition: 状態について答えてほしいこと。型 (noul / choice) を持ち、質問名で区別する。
+    relations: {part_of: [request]}
+    code: [local_decision_model.schema.Question, local_decision_model.schema.parse_question]
+    external: {typesafe: "questions の値"}
+    note: 学習データ (JSONL) の question フィールドは質問ではなく仮説文。hypothesis を参照。
+
+  question_name:
+    ja: 質問名
+    en: question name
+    layer: interface
+    definition: リクエストの中で質問を区別するキー。回答も同じキーで返す。
+    relations: {part_of: [question]}
+    external: {typesafe: "questions のキー"}
+
+  noul:
+    ja: noul
+    en: noul
+    layer: interface
+    definition: 確率付きの真偽値で答える質問の型。instructions は「真のとき成り立つ文」。
+    relations: {is_a: [question], contrasts_with: [choice]}
+    code: [local_decision_model.schema.Noul]
+    external: {typesafe: noul}
+    aliases: ["bool (YAML の type: bool、BoolAnswer、temperature_bool)"]
+
+  choice:
+    ja: choice
+    en: choice
+    layer: interface
+    definition: 選択肢から 1 つを選ぶ質問の型。選択肢ごとの確率の合計は 1。
+    relations: {is_a: [question], contrasts_with: [noul]}
+    code: [local_decision_model.schema.Choice]
+    external: {typesafe: choice}
+
+  score_type:
+    ja: score
+    en: score
+    layer: interface
+    status: planned
+    definition: 順序付きの水準 (最大 10 段階) で答える質問の型。水準を choice として確率を出し、加重平均を返す。
+    relations: {is_a: [question]}
+    external: {typesafe: score}
+    note: Scorer (判断ロジットを返す部品) とは無関係。
+
+  instructions:
+    ja: 指示
+    en: instructions
+    layer: interface
+    definition: 質問の本文。noul ではそのまま仮説文になり、choice では選択肢と組み合わせて仮説文を作る。
+    relations: {part_of: [question], produces: [hypothesis]}
+    code: [local_decision_model.schema.Noul, local_decision_model.schema.Choice]
+    external: {typesafe: "instructions (疑問文で書く)"}
+    aliases: [質問文]
+
+  option:
+    ja: 選択肢
+    en: option
+    layer: interface
+    definition: choice の答えの候補。2 つ以上で、重複しない。
+    relations: {part_of: [choice]}
+    code: [local_decision_model.schema.Choice]
+    external: {typesafe: "criteria のキー (値は説明文)"}
+
+  option_template:
+    ja: テンプレート
+    en: option template
+    layer: interface
+    definition: "choice の指示に書く {option}。選択肢で置き換えて仮説文を作る。なければ指示の末尾に選択肢をつなげる。"
+    relations: {part_of: [instructions], uses: [option], produces: [hypothesis]}
+    code: [local_decision_model.schema.Choice.hypotheses]
+    note: TypeSafe の API にはない独自の仕組み。
+
+  answer:
+    ja: 回答
+    en: answer
+    layer: interface
+    definition: 質問ごとの、型付きで確率の付いた答え。文字列は生成しない。
+    relations: {uses: [probability]}
+    code:
+      - local_decision_model.schema.Answer
+      - local_decision_model.schema.BoolAnswer
+      - local_decision_model.schema.ChoiceAnswer
+    external: {typesafe: "noul は {type, noul}、choice は {choice, probabilities, confidence}"}
+
+  probability:
+    ja: 確率
+    en: probability
+    layer: interface
+    definition: 較正済みの確率。noul は sigmoid(z / T)、choice は選択肢全体の softmax(z / T)。
+    relations: {uses: [decision_logit, temperature]}
+    code: [local_decision_model.decide.Decider.decide]
+
+  confidence:
+    ja: confidence
+    en: confidence
+    layer: interface
+    status: planned
+    definition: 確率の分布がどれだけ 1 つの答えに集中しているか (0〜1)。choice は (n·p_max − 1) / (n − 1)。
+    relations: {uses: [probability]}
+    external: {typesafe: confidence}
+    note: 確率そのものとは別の値。
+
+  # ---------------------------------------------------------------- inference
+  hypothesis:
+    ja: 仮説
+    en: hypothesis
+    layer: inference
+    definition: NLI モデルに渡す文。状態から成り立つかどうかを判定する対象で、質問の指示から作る。
+    relations: {part_of: [pair]}
+    code: [local_decision_model.schema.Noul.hypotheses, local_decision_model.schema.Choice.hypotheses]
+    external: {nli: hypothesis}
+    aliases: [仮説文, "学習データ (JSONL) の question フィールド"]
+
+  pair:
+    ja: ペア
+    en: pair
+    layer: inference
+    definition: (状態, 仮説) の組。ペア方式の推論と、いまの学習データの 1 単位。
+    relations: {uses: [state, hypothesis]}
+    code: [local_decision_model.scoring.Pair]
+
+  classification_logits:
+    ja: 分類ロジット
+    en: classification logits
+    layer: inference
+    definition: NLI ヘッドの出力 (entailment / neutral / contradiction)。
+    code: [local_decision_model.scoring.decision_logits]
+    external: {nli: logits}
+
+  decision_logit:
+    ja: 判断ロジット
+    en: decision logit
+    layer: inference
+    definition: 仮説が状態から成り立つ度合い z。z = logit[entailment] − logit[contradiction]。
+    relations: {uses: [classification_logits]}
+    code: [local_decision_model.scoring.decision_logits]
+    aliases: [z]
+
+  temperature:
+    ja: 温度
+    en: temperature
+    layer: inference
+    definition: 判断ロジットを確率にするときの割る数 T。noul 用と choice 用を別々に持つ。
+    relations: {part_of: [inference_config]}
+    code: [local_decision_model.scoring.S1Config, local_decision_model.decide.Decider]
+    aliases: [T]
+
+  calibration:
+    ja: 較正
+    en: calibration
+    layer: inference
+    definition: 確率が実際の正解率と合うように、検証データで温度を求めること。
+    relations: {produces: [temperature], uses: [decision_logit, label]}
+    code: [local_decision_model.calibration.fit_temperature]
+
+  ece:
+    ja: ECE
+    en: expected calibration error
+    layer: inference
+    definition: 較正の良さの指標。確率を区間に分け、平均確率と正解率の差を件数で重み付けした平均。
+    relations: {uses: [probability, label]}
+    code: [local_decision_model.calibration.expected_calibration_error]
+
+  arch:
+    ja: 方式
+    en: arch
+    layer: inference
+    definition: 状態と質問をモデルにどう通すか。ペア方式かパック方式。
+    relations: {part_of: [inference_config]}
+    code: [local_decision_model.scoring.S1Config]
+
+  pair_arch:
+    ja: ペア方式
+    en: pair arch
+    layer: inference
+    definition: (状態, 仮説) のペアごとに 1 系列を作って推論する方式。状態のトークンも仮説を見る。教師と比較の基準に使う。
+    relations: {is_a: [arch], contrasts_with: [packed_arch], uses: [pair]}
+    code:
+      - local_decision_model.scoring.Scorer
+      - local_decision_model.torch_backend.TorchScorer
+      - local_decision_model.openvino_backend.OpenVINOScorer
+
+  packed_arch:
+    ja: パック方式
+    en: packed arch
+    layer: inference
+    definition: 状態と複数の質問を 1 本の系列に詰め、1 回の推論で全質問の判断ロジットを読む方式。
+    relations: {is_a: [arch], contrasts_with: [pair_arch], uses: [pack]}
+    code:
+      - local_decision_model.scoring.QuestionScorer
+      - local_decision_model.torch_backend.TorchPackedScorer
+      - local_decision_model.packed_model.PackedDecider
+    note: OpenVINO での推論とエクスポートは未実装 (フェーズ 4)。
+
+  scorer:
+    ja: scorer
+    en: scorer
+    layer: inference
+    definition: 判断ロジットを返す部品。方式とバックエンドの組み合わせごとに 1 つある。
+    relations: {produces: [decision_logit]}
+    code: [local_decision_model.scoring.Scorer, local_decision_model.scoring.QuestionScorer]
+    note: PackedDecider は名前に反してこの層 (判断ロジットを返す nn.Module)。
+
+  decider:
+    ja: decider
+    en: decider
+    layer: inference
+    definition: scorer の判断ロジットを、温度を使って型付きの回答にする部品。
+    relations: {uses: [scorer, temperature], produces: [answer]}
+    code: [local_decision_model.decide.Decider]
+
+  backend:
+    ja: バックエンド
+    en: backend
+    layer: inference
+    definition: 推論を実行するライブラリ。torch か openvino。
+    code: [local_decision_model.torch_backend, local_decision_model.openvino_backend]
+
+  device:
+    ja: デバイス
+    en: device
+    layer: inference
+    definition: 推論を実行するハードウェア。torch は cuda / cpu、openvino は NPU / GPU / CPU。
+    relations: {part_of: [backend]}
+    code: [local_decision_model.torch_backend.resolve_device, local_decision_model.openvino_backend.available_devices]
+
+  base_model:
+    ja: ベースモデル
+    en: base model
+    layer: inference
+    definition: 出発点にする多言語 NLI クロスエンコーダ (mDeBERTa-v3-base)。学習しなくても zero-shot で動く。
+    code: [local_decision_model.scoring.DEFAULT_BASE_MODEL]
+
+  model_dir:
+    ja: モデルディレクトリ
+    en: model directory
+    layer: inference
+    definition: 重み (または IR)、トークナイザ、config.json、推論設定をまとめたディレクトリ。models/ の下に置き、Git には入れない。
+    relations: {uses: [inference_config]}
+
+  inference_config:
+    ja: 推論設定
+    en: inference config
+    layer: inference
+    definition: モデルディレクトリに保存する設定 (方式、温度、系列長、パック方式の設定)。
+    relations: {part_of: [model_dir]}
+    code: [local_decision_model.scoring.S1Config, local_decision_model.scoring.CONFIG_FILE]
+    aliases: [s1.json, S1Config]
+
+  ir:
+    ja: IR
+    en: IR
+    layer: inference
+    definition: OpenVINO の中間表現 (model.xml)。開発 PC でエクスポートし、NPU PC に転送して使う。
+    relations: {part_of: [model_dir]}
+    code: [local_decision_model.export.export, local_decision_model.openvino_backend.IR_FILE]
+
+  # ------------------------------------------------------------------ packing
+  pack:
+    ja: パック
+    en: pack
+    layer: packing
+    definition: パック方式の 1 回の推論の入力。固定長の整数配列 5 本と、マーカーの対応表からなる。
+    relations: {uses: [state, question]}
+    code: [local_decision_model.packing.Pack, local_decision_model.packing.pack, local_decision_model.packing.unpack]
+    aliases: ["回 (「1 回の推論」「次の回」)"]
+    note: 1 つのリクエストが入りきらないときは複数のパックに分かれる。
+
+  marker:
+    ja: マーカー
+    en: marker
+    layer: packing
+    definition: "判断ロジットを読む位置に置くトークン ([Q] / [O])。中身は [CLS] と同じトークン。"
+    relations: {part_of: [pack], produces: [decision_logit]}
+    code: [local_decision_model.packing.MarkerKey]
+    note: choice の指示にはマーカーを付けない (shared のとき)。読むのは選択肢のマーカーだけ。
+
+  marker_slot:
+    ja: 枠
+    en: marker slot
+    layer: packing
+    definition: 1 つのパックに置けるマーカーの場所。数は max_markers で固定。
+    relations: {part_of: [pack], uses: [marker]}
+    code: [local_decision_model.scoring.S1Config]
+    aliases: [slot]
+
+  group:
+    ja: グループ
+    en: group
+    layer: packing
+    definition: 互いに見える範囲がひとまとまりの単位。noul は指示だけ、choice は指示と選択肢。
+    relations: {part_of: [pack]}
+    code: [local_decision_model.packing._Group]
+
+  role:
+    ja: 役割
+    en: role
+    layer: packing
+    definition: トークンが状態・質問・選択肢のどれに属するか。学習可能な役割埋め込みで区別する。
+    code: [local_decision_model.packed_model.ROLES, local_decision_model.packed_model.PackedDecider]
+
+  position:
+    ja: 位置番号
+    en: position
+    layer: packing
+    definition: 相対位置の計算に使う番号。質問ごとに「状態のすぐ後ろ」から振り直す。マーカーは既定で 0。
+    relations: {part_of: [pack]}
+    code: [local_decision_model.packing.Pack, local_decision_model.scoring.S1Config]
+
+  visibility:
+    ja: 見える範囲
+    en: visibility
+    layer: packing
+    definition: アテンションで参照してよい相手。状態は状態のみ、質問は状態と自分、選択肢は状態と親の質問と自分。
+    relations: {produces: [question_independence]}
+    code: [local_decision_model.packed_model.PackedDecider.forward]
+    aliases: [マスク, アテンションマスク]
+
+  question_independence:
+    ja: 質問同士の独立
+    en: question independence
+    layer: packing
+    definition: ある質問の答えが、他の質問の有無や順番で変わらないこと。パック方式が守る性質。
+    relations: {uses: [visibility, position, state_truncation]}
+    files: [tests/test_packed_model.py]
+
+  state_truncation:
+    ja: 状態の切り詰め
+    en: state truncation
+    layer: packing
+    definition: 状態を max_state_tokens で固定長に切ること。質問の量で長さが変わらないようにする。
+    relations: {uses: [state]}
+    code: [local_decision_model.scoring.S1Config, local_decision_model.packing.pack]
+
+  choice_layout:
+    ja: 詰め方
+    en: choice layout
+    layer: packing
+    definition: choice のパックへの置き方。shared は指示を共有し、expanded は選択肢ごとの仮説文を独立した質問として置く。
+    relations: {uses: [choice, group]}
+    code: [local_decision_model.scoring.S1Config, local_decision_model.packing._groups]
+
+  sequence_length:
+    ja: 系列長
+    en: sequence length
+    layer: packing
+    definition: 入力の固定長。NPU は動的形状が苦手なので、ペア方式は max_length、パック方式は lengths のうち収まる最短を使う。
+    code: [local_decision_model.scoring.S1Config]
+
+  # ----------------------------------------------------------------- training
+  example:
+    ja: 学習データの行
+    en: example
+    layer: training
+    definition: 学習データの 1 単位。いまは 1 ペアとラベル (JSONL の state / question / label)。
+    relations: {uses: [pair, label]}
+    code: [local_decision_model.train.Example, local_decision_model.train.load_jsonl]
+    files: [data/sample.jsonl]
+    note: フェーズ 2 で「1 つの状態 + 複数の質問 + labels」の形に変える予定。
+
+  label:
+    ja: ラベル
+    en: label
+    layer: training
+    definition: 仮説が成り立つかの正解。0 / 1 のほか、0〜1 の確率 (ソフトラベル) も使える。
+    note: NLI のクラスのラベル (id2label の entailment など) とは別のもの。
+
+  fine_tuning:
+    ja: ファインチューニング
+    en: fine-tuning
+    layer: training
+    definition: ベースモデルを判断ロジットに対して学習すること。終わりに温度を較正して保存する。
+    relations: {uses: [example, base_model], produces: [model_dir]}
+    code: [local_decision_model.train.train]
+    aliases: [学習]
+
+  zero_shot:
+    ja: zero-shot
+    en: zero-shot
+    layer: training
+    definition: ファインチューニングせず、ベースモデルのまま推論すること。
+    relations: {uses: [base_model], contrasts_with: [fine_tuning]}
+
+  teacher:
+    ja: 教師
+    en: teacher
+    layer: training
+    definition: ラベルの確率を付けるモデル。ペア方式の mDeBERTa を使い、大きな LLM もあとから足せる。
+    relations: {produces: [label]}
+
+  distillation:
+    ja: 蒸留
+    en: distillation
+    layer: training
+    status: planned
+    definition: 教師の確率をソフトラベルにして学習すること。パック方式がペア方式の答えを再現するようにする。
+    relations: {is_a: [fine_tuning], uses: [teacher]}
+
+  eval_set:
+    ja: 評価セット
+    en: eval set
+    layer: training
+    definition: 人が正解を付けた、学習用とは別のデータ。較正と正解率はこちらで測る。
+    files: [scripts/phase0/ja_eval.yaml]
+    note: 較正に使う検証データ (学習データから分けたもの) とは別。
+
+  agreement:
+    ja: 一致
+    en: agreement
+    layer: training
+    definition: パック方式の判定がペア方式と同じになる割合。正解率とは別に測る。
+    relations: {uses: [pair_arch, packed_arch]}
+    files: [scripts/phase1/zero_shot_agreement.py]
+
+  # -------------------------------------------------------------- environment
+  dev_pc:
+    ja: 開発 PC
+    en: dev PC
+    layer: environment
+    definition: NVIDIA GPU の Ubuntu PC。学習、評価、エクスポート、GPU での動作確認を行う。
+    relations: {uses: [workshop]}
+    files: [.workshop/gpu.yaml]
+
+  npu_pc:
+    ja: NPU PC
+    en: NPU PC
+    layer: environment
+    definition: Intel Core Ultra の PC。NPU での推論とベンチマークだけを行う。Windows では uv を直接使う。
+    files: [scripts/npu.ps1, .workshop/npu.yaml]
+
+  workshop:
+    ja: ワークショップ
+    en: workshop
+    layer: environment
+    definition: Canonical Workshop で定義した開発環境。gpu と npu の 2 つがある。
+    files: [.workshop/gpu.yaml, .workshop/npu.yaml]
+
+  action:
+    ja: action
+    en: action
+    layer: environment
+    definition: ワークショップに定義したコマンド (setup / check / test / decide / bench など)。
+    relations: {part_of: [workshop]}
+    files: [.workshop/gpu.yaml, .workshop/npu.yaml, scripts/npu.ps1]
+    note: actions を変えるときは npu.ps1 も同時に直す。
+
+  phase:
+    ja: フェーズ
+    en: phase
+    layer: environment
+    definition: プランの作業の区切り (0〜6)。結果は docs/phaseN-results.md に書く。
+    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md]
+
+  system_one:
+    ja: System One
+    en: System One
+    layer: environment
+    definition: TypeSafe の判断モデル (jev) とその API。このプロジェクトが入出力の形をならう相手で、フェーズ 6 で HTTP API を互換にする。
+    aliases: [jev, TypeSafe API]

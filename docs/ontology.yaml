@@ -54,6 +54,7 @@ concepts:
     definition: 判断の材料になる自由テキスト。質問はすべてこの状態について答える。
     relations: {part_of: [request]}
     external: {typesafe: "state (オブジェクトや配列も可。ここでは文字列のみ)", nli: premise}
+    files: [data/states.jsonl, scripts/phase2/generate_states.py]
     note: パック方式では状態のトークンは質問を見ない (question_ids が 0)。
 
   question:
@@ -63,8 +64,9 @@ concepts:
     definition: 状態について答えてほしいこと。型 (noul / choice) を持ち、質問名で区別する。
     relations: {part_of: [request]}
     code: [local_decision_model.schema.Question, local_decision_model.schema.parse_question]
+    files: [data/questions.yaml]
     external: {typesafe: "questions の値"}
-    note: 学習データ (JSONL) の question フィールドは質問ではなく仮説文。hypothesis を参照。
+    note: ペアの学習データ (data/sample-pairs.jsonl) の question フィールドは質問ではなく仮説文。hypothesis を参照。
 
   question_name:
     ja: 質問名
@@ -169,14 +171,14 @@ concepts:
     relations: {part_of: [pair]}
     code: [local_decision_model.schema.Noul.hypotheses, local_decision_model.schema.Choice.hypotheses]
     external: {nli: hypothesis}
-    aliases: ["学習データ (JSONL) の question フィールド (フェーズ 2 で形式ごと変える)"]
+    aliases: ["ペアの学習データ (JSONL) の question フィールド (フェーズ 3 で train が新しい形式に移ったら消す)"]
     note: 文字列そのものを指すときは「仮説文」と書いてよい。
 
   pair:
     ja: ペア
     en: pair
     layer: inference
-    definition: (状態, 仮説) の組。ペア方式の推論と、いまの学習データの 1 単位。
+    definition: (状態, 仮説) の組。ペア方式の推論と、ペアの学習データの 1 単位。
     relations: {uses: [state, hypothesis]}
     code: [local_decision_model.scoring.Pair]
 
@@ -234,7 +236,7 @@ concepts:
     ja: ペア方式
     en: pair arch
     layer: inference
-    definition: (状態, 仮説) のペアごとに 1 系列を作って推論する方式。状態のトークンも仮説を見る。教師と比較の基準に使う。
+    definition: (状態, 仮説) のペアごとに 1 系列を作って推論する方式。状態のトークンも仮説を見る。パック方式と比べる基準に使う。
     relations: {is_a: [arch], contrasts_with: [packed_arch], uses: [pair]}
     code:
       - local_decision_model.scoring.Scorer
@@ -411,17 +413,22 @@ concepts:
     ja: 学習データの行
     en: example
     layer: training
-    definition: 学習データの 1 単位。いまは 1 ペアとラベル (JSONL の state / question / label)。
-    relations: {uses: [pair, label]}
-    code: [local_decision_model.train.Example, local_decision_model.train.load_jsonl]
-    files: [data/sample.jsonl]
-    note: フェーズ 2 で「1 つの状態 + 複数の質問 + labels」の形に変える予定。
+    definition: 学習データの 1 単位。1 つの状態 + 複数の質問 + labels (JSONL の state / questions / labels)。
+    relations: {uses: [state, question, label]}
+    code:
+      - local_decision_model.distill.Example
+      - local_decision_model.distill.load_examples
+      - local_decision_model.train.Example
+      - local_decision_model.train.load_jsonl
+    files: [data/sample.jsonl, data/sample-pairs.jsonl]
+    note: train.Example はペアの学習データ (1 行 = 1 ペアとラベル)。train はまだこちらだけを読む (フェーズ 3 で移す)。
 
   label:
     ja: ラベル
     en: label
     layer: training
-    definition: 仮説が成り立つかの正解。0 / 1 のほか、0〜1 の確率 (ソフトラベル) も使える。
+    definition: 仮説が成り立つかの正解。0 / 1 のほか、0〜1 の確率 (ソフトラベル) も使える。choice は選択肢 → 確率。
+    code: [local_decision_model.distill.Label]
     note: NLI のクラスのラベル (id2label の entailment など) とは別のもの。
 
   fine_tuning:
@@ -444,15 +451,17 @@ concepts:
     ja: 教師
     en: teacher
     layer: training
-    definition: ラベルの確率を付けるモデル。ペア方式の mDeBERTa を使い、大きな LLM もあとから足せる。
+    definition: ラベルの確率を付けるモデル。Claude Code (大きな LLM) だけを使う。
     relations: {produces: [label]}
+    files: [scripts/phase2/label_with_claude.py, data/train-claude.jsonl]
+    note: ペア方式の mDeBERTa は教師に使わない (zero-shot では「真」に寄りすぎる)。distill はペア方式のラベルを比較用に付ける。
 
   distillation:
     ja: 蒸留
     en: distillation
     layer: training
     status: planned
-    definition: 教師の確率をソフトラベルにして学習すること。パック方式がペア方式の答えを再現するようにする。
+    definition: 教師の確率をソフトラベルにして学習すること。パック方式が教師の答えを 1 回の推論で再現するようにする。
     relations: {is_a: [fine_tuning], uses: [teacher]}
 
   eval_set:
@@ -460,8 +469,8 @@ concepts:
     en: eval set
     layer: training
     definition: 人が正解を付けた、学習用とは別のデータ。較正と正解率はこちらで測る。
-    files: [scripts/phase0/ja_eval.yaml]
-    note: 較正に使う検証データ (学習データから分けたもの) とは別。
+    files: [scripts/phase0/ja_eval.yaml, data/eval-states.jsonl, data/eval-draft.jsonl]
+    note: eval-draft.jsonl は Claude Code (Opus) が付けた下書きで、人の見直しはまだ。較正に使う検証データ (学習データから分けたもの) とは別。
 
   agreement:
     ja: 一致
@@ -469,7 +478,8 @@ concepts:
     layer: training
     definition: パック方式の判定がペア方式と同じになる割合。正解率とは別に測る。
     relations: {uses: [pair_arch, packed_arch]}
-    files: [scripts/phase1/zero_shot_agreement.py]
+    code: [local_decision_model.distill.distill, local_decision_model.distill.label]
+    files: [scripts/phase1/zero_shot_agreement.py, scripts/phase2/compare_teachers.py, data/train-pair.jsonl]
 
   # -------------------------------------------------------------- environment
   dev_pc:
@@ -508,7 +518,7 @@ concepts:
     en: phase
     layer: environment
     definition: プランの作業の区切り (0〜6)。結果は docs/phaseN-results.md に書く。
-    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md]
+    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md, docs/phase2-results.md]
 
   system_one:
     ja: System One

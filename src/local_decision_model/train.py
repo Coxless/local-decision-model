@@ -1,11 +1,13 @@
 """ファインチューニングと温度較正。
 
-データは JSONL で、1 行 1 ペア:
+データは JSONL で、1 行 1 ペア (data/sample-pairs.jsonl):
     {"state": "...", "question": "仮説文 (Noul の instructions)", "label": 0 か 1 (0〜1 の確率も可)}
 
 Choice の質問も「instructions + 選択肢」の仮説文に展開されるので、同じ形式で学習できる
 (正解の選択肢を 1、それ以外を 0 にする)。ソフトラベルを使えば、大きな LLM が出した確率を
 そのまま教師にした蒸留にもなる。
+
+distill.py が作る「1 行 = 1 つの状態 + 複数の質問」の形式は、パック方式の学習 (フェーズ 3) で読む。
 """
 
 from __future__ import annotations

@@ -43,6 +43,11 @@ actions:
     cd /project
     uv run python -m local_decision_model decide --backend torch --device cuda "$@"
 
+  # 例: workshop run gpu -- distill data/sample-states.jsonl --questions data/sample-questions.yaml
+  distill: |
+    cd /project
+    uv run python -m local_decision_model distill --device cuda "$@"
+
   train: |
     cd /project
     uv run python -m local_decision_model train --device cuda "$@"

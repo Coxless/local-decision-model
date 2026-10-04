@@ -1,0 +1,8 @@
+{"state": "This book was a delight to read.", "question": "The book review is positive.", "label": 1}
+{"state": "I could not finish it. Boring and badly edited.", "question": "The book review is positive.", "label": 0}
+{"state": "注文した商品が3日経っても届きません。返金してください。", "question": "顧客は返金を求めている。", "label": 1}
+{"state": "注文した商品が3日経っても届きません。返金してください。", "question": "顧客は商品に満足している。", "label": 0}
+{"state": "サーバーのディスク使用率が95%を超えました。", "question": "すぐに対応が必要なアラートである。", "label": 1}
+{"state": "定期バックアップが正常に完了しました。", "question": "すぐに対応が必要なアラートである。", "label": 0}
+{"state": "Meeting moved to Thursday 3pm, same room.", "question": "The message changes a schedule.", "label": 1}
+{"state": "Thanks for the update, see you then!", "question": "The message changes a schedule.", "label": 0}

@@ -1,0 +1,10 @@
+# distill に渡す質問セットの例 (問い合わせ)。書き方は examples/*.yaml の questions と同じ。
+# noul は疑問文のままでよい。choice は {option} を入れて、選択肢ごとに文として成り立つようにする。
+questions:
+  angry: 顧客は怒っていますか？
+  refund: 顧客は返金を求めていますか？
+  urgent: すぐに対応が必要な問い合わせですか？
+  topic:
+    type: choice
+    instructions: この問い合わせは{option}に関するものだ。
+    options: [配送, 品質, 料金, 操作方法, その他]

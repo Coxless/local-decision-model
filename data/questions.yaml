@@ -1,0 +1,75 @@
+# 学習用の質問セット (問い合わせ)。distill と scripts/phase2/label_with_claude.py に渡す。
+# 書き方は examples/*.yaml の questions と同じ。
+#
+# - noul は疑問文で書く (jev の instructions と同じ形)。一部は平叙文の言い換えも入れて、
+#   どちらの書き方でも同じ答えになるように学習させる (*_plain)
+# - choice は {option} を入れて、選択肢ごとに文として成り立つようにする
+# - 状態に書かれていることだけで答えられる質問にする
+questions:
+  # ---- 感情と書きぶり
+  angry: 顧客は怒っていますか？
+  angry_plain: 顧客は怒っている。
+  frustrated: 顧客はいら立っていますか？
+  anxious: 顧客は不安を感じていますか？
+  grateful: 顧客は感謝を伝えていますか？
+  satisfied: 顧客は満足していますか？
+  sarcastic: 文面に皮肉が含まれていますか？
+  polite: 丁寧な言葉づかいで書かれていますか？
+
+  # ---- 求めていること
+  refund: 顧客は返金を求めていますか？
+  refund_plain: 顧客は返金を求めている。
+  exchange: 顧客は商品の交換を求めていますか？
+  repair: 顧客は修理を求めていますか？
+  cancel: 顧客は解約や退会を希望していますか？
+  apology: 顧客は謝罪を求めていますか？
+  explanation: 顧客は説明や回答を求めていますか？
+  report_only: これは対応を求めない報告や感想ですか？
+
+  # ---- 緊急度
+  urgent: すぐに対応が必要な問い合わせですか？
+  urgent_plain: すぐに対応が必要な問い合わせである。
+  deadline: 期限や希望の日付が書かれていますか？
+
+  # ---- 内容
+  not_delivered: 商品がまだ届いていないと書かれていますか？
+  damaged: 商品の破損や不具合が書かれていますか？
+  wrong_item: 注文と違うものが届いたと書かれていますか？
+  double_charge: 二重に請求されたと書かれていますか？
+  billing: 請求や料金についての問い合わせですか？
+  login: ログインできないと書かれていますか？
+  how_to: 操作や設定の方法を尋ねていますか？
+  app: アプリについての問い合わせですか？
+  staff: 担当者の対応への不満が書かれていますか？
+  personal_info: 登録情報の変更や削除を求めていますか？
+
+  # ---- 問い合わせの形
+  complaint: これは苦情ですか？
+  is_question: 顧客は質問をしていますか？
+  order_number: 注文番号や予約番号が書かれていますか？
+  repeat: 以前にも同じ件で問い合わせたと書かれていますか？
+  proxy: 本人ではない人が代わりに問い合わせていますか？
+  multiple: 用件が 2 つ以上含まれていますか？
+  resolved: 問題はすでに解決していますか？
+
+  # ---- choice
+  topic:
+    type: choice
+    instructions: この問い合わせは{option}に関するものだ。
+    options: [配送, 品質, 料金, 操作方法, その他]
+  sentiment:
+    type: choice
+    instructions: 顧客の気持ちは{option}だ。
+    options: [肯定的, 中立的, 否定的]
+  intent:
+    type: choice
+    instructions: この問い合わせの主な目的は{option}だ。
+    options: [質問, 苦情, 依頼, お礼, 要望]
+  urgency:
+    type: choice
+    instructions: この問い合わせの緊急度は{option}。
+    options: [高い, 普通, 低い]
+  wants:
+    type: choice
+    instructions: 顧客が一番求めているのは{option}だ。
+    options: [返金, 交換, 修理, 説明, 手続き, 謝罪, 特になし]

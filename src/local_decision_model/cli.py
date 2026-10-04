@@ -108,7 +108,7 @@ def cmd_distill(args) -> None:
     from .distill import distill, load_question_set
     from .torch_backend import TorchScorer
 
-    # 教師はペア方式。較正済みのモデルディレクトリなら、その温度で確率を付ける
+    # 較正済みのモデルディレクトリなら、その温度で確率を付ける
     config = InferenceConfig.load(args.model) if Path(args.model).is_dir() else InferenceConfig()
     scorer = TorchScorer(args.model, args.device, args.max_length, args.batch_size)
     decider = Decider(scorer, config.temperature_noul, config.temperature_choice)
@@ -172,17 +172,17 @@ def main(argv: list[str] | None = None) -> None:
             s.add_argument("--runs", type=int, default=100)
             s.add_argument("--warmup", type=int, default=10)
 
-    s = sub.add_parser("distill", help="状態と質問セットに教師 (ペア方式) の確率を付ける")
+    s = sub.add_parser("distill", help="状態と質問セットにペア方式の確率を付ける (比較用)")
     s.add_argument("states", help='JSONL。1 行 = {"state": "..."}')
     s.add_argument("--questions", help="質問セットの YAML (行に questions がなければ必須)")
     s.add_argument("--out", default="data/train.jsonl")
-    s.add_argument("--model", default=DEFAULT_BASE_MODEL, help="教師。HF ID か学習済みディレクトリ")
+    s.add_argument("--model", default=DEFAULT_BASE_MODEL, help="HF ID か学習済みディレクトリ")
     s.add_argument("--device", default="cuda")
     s.add_argument(
         "--max-length",
         type=int,
         default=512,
-        help="教師の系列長。パック方式の状態 (max_state_tokens) が切れない長さにする",
+        help="系列長。パック方式の状態 (max_state_tokens) が切れない長さにする",
     )
     s.add_argument("--batch-size", type=int, default=32)
     s.set_defaults(func=cmd_distill)

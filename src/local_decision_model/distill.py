@@ -1,6 +1,7 @@
-"""蒸留用の学習データ作り: 状態と質問セットに、教師の確率を付ける。
+"""学習データの形式と、ペア方式のモデルによるラベル付け。
 
-教師はペア方式のモデル。パック方式がペア方式の答えを再現するように学習するためのデータを作る。
+教師は Claude Code (scripts/phase2/label_with_claude.py)。ここの distill は、同じ形式のラベルを
+ペア方式のモデルで付ける。教師のラベルと比べる基準に使う。
 
 入力:
     状態        JSONL。1 行 = {"state": "..."}。行に "questions" があれば、質問セットの代わりに使う
@@ -11,7 +12,7 @@
      "labels": {"refund": 0.94, "topic": {"配送": 0.81, "品質": 0.12, "その他": 0.07}}}
 
 labels は、noul が確率、choice が選択肢 → 確率 (合計 1)。
-大きな LLM や人が付けたラベルも、同じ形式で足せる。
+教師のラベルも、人が付ける評価セットも、同じ形式で書く。
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ def load_states(
 
 
 def label(decider: Decider, state: str, specs: dict[str, Any]) -> Example:
-    """1 つの状態の全質問に、教師の確率を付ける。"""
+    """1 つの状態の全質問に、decider の確率を付ける。"""
     answers = decider.decide(state, parse_questions(specs))
     labels: dict[str, Label] = {
         name: a.probability if isinstance(a, NoulAnswer) else a.probabilities

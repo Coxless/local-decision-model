@@ -49,15 +49,15 @@ local-decision-model/
 │   ├── torch_backend.py      # PyTorch (CUDA / CPU)
 │   ├── openvino_backend.py   # OpenVINO (NPU / GPU / CPU)
 │   ├── export.py             # PyTorch → OpenVINO IR
-│   ├── distill.py            # 蒸留用の学習データ作り (教師の確率を付ける)
+│   ├── distill.py            # 学習データの形式と、ペア方式のモデルによるラベル付け (比較用)
 │   ├── train.py              # ファインチューニング
 │   └── cli.py                # python -m local_decision_model ...
 ├── examples/review.yaml      # リクエスト例
 ├── data/
 │   ├── states.jsonl          # 学習用の状態 (scripts/phase2/generate_states.py で Claude Code に書かせた問い合わせ文)
 │   ├── questions.yaml        # 学習用の質問セット
-│   ├── train-pair.jsonl      # 教師 (ペア方式) のラベル: distill の出力
-│   ├── train-claude.jsonl    # 教師 (Claude Code) のラベル: scripts/phase2/label_with_claude.py の出力
+│   ├── train-pair.jsonl      # zero-shot のペア方式のラベル (比較用。学習には使わない): distill の出力
+│   ├── train-claude.jsonl    # 学習データ。教師 (Claude Code) のラベル: scripts/phase2/label_with_claude.py の出力
 │   ├── eval-states.jsonl     # 評価セット用の状態
 │   ├── eval-draft.jsonl      # 評価セットの下書き (Claude Code のラベル。人の見直しはまだ)
 │   ├── sample-states.jsonl   # distill の入力例: 状態
@@ -115,7 +115,8 @@ workshop run gpu -- export --model models/finetuned --out models/finetuned-ov
 {"state": "This book was a delight to read.", "question": "The book review is positive.", "label": 1}
 ```
 
-蒸留用の学習データ作り（状態と質問セットに、教師のペア方式の確率を付ける）:
+蒸留用の学習データは、教師の Claude Code がラベルを付けます（`scripts/phase2/label_with_claude.py`、ワークショップの外で実行）。
+`distill` は、同じ形式のラベルをペア方式のモデルで付けます（教師のラベルと比べるため）:
 
 ```bash
 workshop run gpu -- distill data/sample-states.jsonl --questions data/sample-questions.yaml --out data/train.jsonl
@@ -182,7 +183,7 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 | `lint` / `fmt` | ✓ |  | ruff |
 | `decide` | ✓ | ✓ | リクエスト YAML に回答（既定 `examples/review.yaml`） |
 | `bench`  | ✓ | ✓ | レイテンシ計測 |
-| `distill` | ✓ |  | 状態と質問セットに教師の確率を付ける |
+| `distill` | ✓ |  | 状態と質問セットにペア方式の確率を付ける（比較用） |
 | `train`  | ✓ |  | ファインチューニング + 温度較正 |
 | `export` | ✓ |  | OpenVINO IR に変換 |
 
@@ -201,7 +202,6 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 
 ## 今後
 
-- 教師データ作り: 大きな LLM（[system-one-adapter](https://github.com/typesafe-ai/system-one-adapter-python) など）で
-  状態と質問に確率を付けさせ、`distill` の出力と同じ形式で足す。
+- パック方式の学習: 教師 (Claude Code) のラベル `data/train-claude.jsonl` で蒸留する（`docs/plan.md` のフェーズ 3）。
 - INT8 量子化（NNCF）で NPU のレイテンシをさらに下げる。
 - 数値・リストなど noul / choice 以外の型。

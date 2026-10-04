@@ -14,7 +14,7 @@ jev の「構造化出力専用の仕組み」と「較正された確率」を�
 - 開発 PC の GPU は GTX 1660 Ti (6 GB)。bf16 が使えず、mDeBERTa は fp16 で NaN が出やすいので、
   学習は fp32 + メモリ節約 (単語埋め込みの凍結、gradient checkpointing、勾配の累積) で行う。
 - 今のコードは `Scorer.score(pairs)` が (状態, 仮説) のペア単位。パック入力用の経路を新しく足し、
-  ペア方式は教師モデル・比較用として残す。
+  ペア方式は比較用として残す (教師には使わない。フェーズ 2)。
 
 ## 実行環境と PC 間の流れ
 
@@ -128,23 +128,20 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 ## フェーズ 2: データ
 
-データ作りまで完了。結果は [phase2-results.md](phase2-results.md)。評価セットの人による見直しと、
-混ぜ方・合格ラインの決定が残っている。
+データ作りまで完了。結果は [phase2-results.md](phase2-results.md)。評価セットの人による見直しが残っている。
 
-教師は**ペア方式の mDeBERTa** と**大きな LLM** の 2 つにし、ラベルを混ぜる (2026-10-03 に決定)。
-パック方式がペア方式の答えを 1 パスで再現しつつ、ペア方式の間違いは LLM のラベルで直す。
+教師は **Claude Code (`claude -p`) だけ**にする (2026-10-05 に決定)。ペア方式の mDeBERTa は教師に使わない。
 
-- 理由: zero-shot の mDeBERTa は「真」に寄る (フェーズ 0)。`data/sample.jsonl` でも、
-  「通知をオフにする方法を教えてください」に「顧客は怒っていますか？」0.87、「返金を求めていますか？」0.65 を付けた。
-  ペア方式だけを教師にすると、この間違いごと蒸留される
-- LLM のラベルも `distill` の出力と同じ形式 (`state` / `questions` / `labels`) で作り、`distill.load_examples` で読む
-- LLM の教師は Claude Code (`claude -p`) を使う (2026-10-03 に決定)。`scripts/phase2/label_with_claude.py` が、
-  確率を 0〜100 の整数で答えさせて `data/train-claude.jsonl` に書く。ペア方式の教師のラベルは `data/train-pair.jsonl`
-- 2 つの教師の食い違いは `scripts/phase2/compare_teachers.py` で質問ごとに見る
-- 未決: 混ぜ方 (未決事項 7)
+- 経緯: はじめはペア方式の mDeBERTa を教師にし、大きな LLM のラベルを混ぜる計画だった。
+  実際に比べると、zero-shot のペア方式はほとんどの質問に「真」と答え、Claude と noul の判定が 37% しか合わなかった。
+  Sonnet と Opus の判定は 95% 一致した (フェーズ 2 の結果の 3 節)
+- 学習データは `data/train-claude.jsonl` (`scripts/phase2/label_with_claude.py` が、確率を 0〜100 の整数で答えさせて書く)
+- ペア方式は教師ではなく、パック方式と比べる基準として残す。`distill` はペア方式のモデルでラベルを付けるコマンドで、
+  比較用に使う (`data/train-pair.jsonl` は zero-shot のペア方式のラベル 704 件。学習には使わない)
+- ラベルどうしの比較は `scripts/phase2/compare_teachers.py`
 
 - [x] `src/local_decision_model/distill.py` (新規): 状態テキストと質問セットを入力に、既存の `TorchScorer` で
-      教師の確率を付ける
+      ペア方式の確率を付ける
 - [x] データ形式を「1 行 = 1 つの状態 + 複数の質問」に変える。質問の書き方は `examples/*.yaml` と同じ
       (`distill.load_examples` で読む。ペア方式の `train` は 1 行 1 ペアの形式のままで、フェーズ 3 で移す)
 
@@ -171,7 +168,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 - [ ] 比較実験: 「状態は質問を見ない」版 (キャッシュできて独立) と「状態も質問を見る」版
       (精度は上がるかもしれないが質問同士が干渉する) を比べる。差が小さければ前者を採用する
 
-**合格ライン (目安)**: 評価セットで、ペア方式との正解率の差が 1〜2 ポイント以内、
+**合格ライン (目安、基準は未決事項 7)**: 評価セットで、ペア方式との正解率の差が 1〜2 ポイント以内、
 ECE はペア方式と同等以下。
 
 ## フェーズ 4: エクスポートと NPU 推論
@@ -257,7 +254,5 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
    常駐の方法 (手動起動、スタートアップ、Windows サービス) は、使うアプリが決まってから決める。
 6. **疑問文の instructions への対応**: 学習データの質問を jev と同じ疑問文で書いて学習させるか、
    疑問文を平叙文に変換するか。フェーズ 0 の測定結果を見て決める。
-7. **2 つの教師のラベルの混ぜ方**: LLM のラベルで置き換える、2 つの教師の確率を平均する、
-   2 つの教師が食い違う行だけ LLM を使う、のどれか。評価セットで 2 つの教師の正解率と ECE を測って決める。
-   フェーズ 2 の結果では、zero-shot のペア方式は Claude と noul の判定が 37% しか合わず、置き換える案が有力。
-   その場合、フェーズ 3 の合格ラインの基準 (ペア方式) も、同じ学習データでファインチューニングしたものに変える。
+7. **フェーズ 3 の合格ラインの基準**: 教師を Claude Code だけにしたので、zero-shot のペア方式との差を測っても
+   意味がない。同じ学習データ (`data/train-claude.jsonl`) でファインチューニングしたペア方式を基準にする案が有力。

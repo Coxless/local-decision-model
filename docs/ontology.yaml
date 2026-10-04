@@ -236,7 +236,7 @@ concepts:
     ja: ペア方式
     en: pair arch
     layer: inference
-    definition: (状態, 仮説) のペアごとに 1 系列を作って推論する方式。状態のトークンも仮説を見る。教師と比較の基準に使う。
+    definition: (状態, 仮説) のペアごとに 1 系列を作って推論する方式。状態のトークンも仮説を見る。パック方式と比べる基準に使う。
     relations: {is_a: [arch], contrasts_with: [packed_arch], uses: [pair]}
     code:
       - local_decision_model.scoring.Scorer
@@ -451,22 +451,17 @@ concepts:
     ja: 教師
     en: teacher
     layer: training
-    definition: ラベルの確率を付けるモデル。ペア方式の mDeBERTa と大きな LLM (Claude Code) の 2 つを使い、ラベルを混ぜる。
+    definition: ラベルの確率を付けるモデル。Claude Code (大きな LLM) だけを使う。
     relations: {produces: [label]}
-    code: [local_decision_model.distill.distill, local_decision_model.distill.label]
-    files:
-      - scripts/phase2/label_with_claude.py
-      - scripts/phase2/compare_teachers.py
-      - data/train-pair.jsonl
-      - data/train-claude.jsonl
-    note: ペア方式の教師は distill、LLM の教師は label_with_claude.py。どちらも同じ形式の JSONL を書く。混ぜ方は未決。
+    files: [scripts/phase2/label_with_claude.py, data/train-claude.jsonl]
+    note: ペア方式の mDeBERTa は教師に使わない (zero-shot では「真」に寄りすぎる)。distill はペア方式のラベルを比較用に付ける。
 
   distillation:
     ja: 蒸留
     en: distillation
     layer: training
     status: planned
-    definition: 教師の確率をソフトラベルにして学習すること。パック方式がペア方式の答えを再現するようにする。
+    definition: 教師の確率をソフトラベルにして学習すること。パック方式が教師の答えを 1 回の推論で再現するようにする。
     relations: {is_a: [fine_tuning], uses: [teacher]}
 
   eval_set:
@@ -483,7 +478,8 @@ concepts:
     layer: training
     definition: パック方式の判定がペア方式と同じになる割合。正解率とは別に測る。
     relations: {uses: [pair_arch, packed_arch]}
-    files: [scripts/phase1/zero_shot_agreement.py]
+    code: [local_decision_model.distill.distill, local_decision_model.distill.label]
+    files: [scripts/phase1/zero_shot_agreement.py, scripts/phase2/compare_teachers.py, data/train-pair.jsonl]
 
   # -------------------------------------------------------------- environment
   dev_pc:

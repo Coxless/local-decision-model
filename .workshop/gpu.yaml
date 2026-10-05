@@ -52,6 +52,11 @@ actions:
     cd /project
     uv run python -m local_decision_model train --device cuda "$@"
 
+  # 例: workshop run gpu -- evaluate data/eval-draft.jsonl --model models/packed
+  evaluate: |
+    cd /project
+    uv run python -m local_decision_model evaluate --backend torch --device cuda "$@"
+
   export: |
     cd /project
     uv run python -m local_decision_model export "$@"

@@ -50,7 +50,8 @@ local-decision-model/
 │   ├── openvino_backend.py   # OpenVINO (NPU / GPU / CPU)
 │   ├── export.py             # PyTorch → OpenVINO IR
 │   ├── distill.py            # 学習データの形式と、ペア方式のモデルによるラベル付け (比較用)
-│   ├── train.py              # ファインチューニング
+│   ├── train.py              # ファインチューニング (ペア方式 / パック方式) と温度較正
+│   ├── evaluate.py           # 判断ロジットの収集、温度の較正、評価指標
 │   └── cli.py                # python -m local_decision_model ...
 ├── examples/review.yaml      # リクエスト例
 ├── data/
@@ -62,8 +63,7 @@ local-decision-model/
 │   ├── eval-draft.jsonl      # 評価セットの下書き (Claude Code のラベル。人の見直しはまだ)
 │   ├── sample-states.jsonl   # distill の入力例: 状態
 │   ├── sample-questions.yaml # distill の入力例: 質問セット
-│   ├── sample.jsonl          # distill の出力例 (1 行 = 1 つの状態 + 複数の質問 + labels)
-│   └── sample-pairs.jsonl    # train の学習データの例 (1 行 1 ペア)
+│   └── sample.jsonl          # 学習データの例。distill の出力 (1 行 = 1 つの状態 + 複数の質問 + labels)
 └── tests/
 ```
 
@@ -102,17 +102,17 @@ workshop run gpu -- bench      # レイテンシ計測
 学習（ファインチューニング + 温度較正）と NPU 用のエクスポート:
 
 ```bash
-workshop run gpu -- train data/train.jsonl --out models/finetuned
+workshop run gpu -- train data/sample.jsonl --out models/finetuned
 workshop run gpu -- decide --model models/finetuned
 workshop run gpu -- export --model models/finetuned --out models/finetuned-ov
 ```
 
-`train` の学習データは 1 行 1 ペアの JSONL です（`data/sample-pairs.jsonl` 参照）。`label` は 0/1 のほか 0〜1 の確率も使えるので、
-大きな LLM が付けた確率を教師にした蒸留もできます。Choice は「instructions + 選択肢」の仮説文に展開して、
-正解の選択肢を 1、それ以外を 0 にした行で学習します。
+`train` は `--arch pair`（既定）か `--arch packed` で方式を選びます。どちらも同じ学習データを読み、終わりに検証データ
+（学習データから分けた 1 割）で noul と choice の温度を別々に較正します。`--eval-data` を付けると、評価セットの指標も出します。
 
-```json
-{"state": "This book was a delight to read.", "question": "The book review is positive.", "label": 1}
+```bash
+workshop run gpu -- train data/train-claude.jsonl --arch packed --eval-data data/eval-draft.jsonl --out models/packed
+workshop run gpu -- evaluate data/eval-draft.jsonl --model models/packed   # 正解率・NLL・ECE
 ```
 
 蒸留用の学習データは、教師の Claude Code がラベルを付けます（`scripts/phase2/label_with_claude.py`、ワークショップの外で実行）。
@@ -123,7 +123,7 @@ workshop run gpu -- distill data/sample-states.jsonl --questions data/sample-que
 ```
 
 出力は 1 行が「1 つの状態 + 複数の質問 + `labels`」の JSONL です（`data/sample.jsonl` 参照）。`labels` は noul が確率、
-choice が選択肢ごとの確率です。パック方式の学習（フェーズ 3）はこの形式を読みます。`train` はまだ 1 行 1 ペアの形式だけを読みます。
+choice が選択肢ごとの確率です。`labels` は 0 / 1 でも書けます。`train` と `evaluate` はこの形式を読みます。
 
 ```json
 {"state": "…", "questions": {"refund": "顧客は返金を求めていますか？", "topic": {"type": "choice", "instructions": "…{option}…", "options": ["配送", "品質"]}},
@@ -184,7 +184,8 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 | `decide` | ✓ | ✓ | リクエスト YAML に回答（既定 `examples/review.yaml`） |
 | `bench`  | ✓ | ✓ | レイテンシ計測 |
 | `distill` | ✓ |  | 状態と質問セットにペア方式の確率を付ける（比較用） |
-| `train`  | ✓ |  | ファインチューニング + 温度較正 |
+| `train`  | ✓ |  | ファインチューニング + 温度較正（`--arch pair` / `packed`） |
+| `evaluate` | ✓ |  | 学習データと同じ形式の JSONL で正解率・NLL・ECE を出す |
 | `export` | ✓ |  | OpenVINO IR に変換 |
 
 `decide` / `bench` の引数は後ろに足せます（例: `workshop run npu -- bench --batch-size 4 --runs 500`）。
@@ -202,6 +203,6 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 
 ## 今後
 
-- パック方式の学習: 教師 (Claude Code) のラベル `data/train-claude.jsonl` で蒸留する（`docs/plan.md` のフェーズ 3）。
+- パック方式の OpenVINO エクスポートと NPU 推論（`docs/plan.md` のフェーズ 4）。学習の結果は `docs/phase3-results.md`。
 - INT8 量子化（NNCF）で NPU のレイテンシをさらに下げる。
 - 数値・リストなど noul / choice 以外の型。

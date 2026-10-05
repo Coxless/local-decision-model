@@ -66,7 +66,6 @@ concepts:
     code: [local_decision_model.schema.Question, local_decision_model.schema.parse_question]
     files: [data/questions.yaml]
     external: {typesafe: "questions の値"}
-    note: ペアの学習データ (data/sample-pairs.jsonl) の question フィールドは質問ではなく仮説文。hypothesis を参照。
 
   question_name:
     ja: 質問名
@@ -171,14 +170,13 @@ concepts:
     relations: {part_of: [pair]}
     code: [local_decision_model.schema.Noul.hypotheses, local_decision_model.schema.Choice.hypotheses]
     external: {nli: hypothesis}
-    aliases: ["ペアの学習データ (JSONL) の question フィールド (フェーズ 3 で train が新しい形式に移ったら消す)"]
     note: 文字列そのものを指すときは「仮説文」と書いてよい。
 
   pair:
     ja: ペア
     en: pair
     layer: inference
-    definition: (状態, 仮説) の組。ペア方式の推論と、ペアの学習データの 1 単位。
+    definition: (状態, 仮説) の組。ペア方式の推論の 1 単位。
     relations: {uses: [state, hypothesis]}
     code: [local_decision_model.scoring.Pair]
 
@@ -213,8 +211,11 @@ concepts:
     en: calibration
     layer: inference
     definition: 確率が実際の正解率と合うように、検証データで温度を求めること。
-    relations: {produces: [temperature], uses: [decision_logit, label]}
-    code: [local_decision_model.calibration.fit_temperature]
+    relations: {produces: [temperature], uses: [decision_logit, label, val_set]}
+    code:
+      - local_decision_model.calibration.fit_temperature
+      - local_decision_model.calibration.fit_temperature_choice
+      - local_decision_model.evaluate.calibrate
 
   ece:
     ja: ECE
@@ -223,6 +224,7 @@ concepts:
     definition: 較正の良さの指標。確率を区間に分け、平均確率と正解率の差を件数で重み付けした平均。
     relations: {uses: [probability, label]}
     code: [local_decision_model.calibration.expected_calibration_error]
+    note: choice は、最上位の答えの確率と、それが正解かどうかで測る。
 
   arch:
     ja: 方式
@@ -359,6 +361,7 @@ concepts:
     layer: packing
     definition: トークンが状態・質問・選択肢のどれに属するか。学習可能な役割埋め込みで区別する。
     code: [local_decision_model.packed_model.ROLES, local_decision_model.packed_model.PackedModel]
+    files: [role_embeddings.safetensors (モデルディレクトリの中)]
 
   position:
     ja: 位置番号
@@ -376,6 +379,7 @@ concepts:
     relations: {produces: [question_independence]}
     code: [local_decision_model.packed_model.PackedModel.forward]
     aliases: [マスク, アテンションマスク]
+    note: 推論設定の state_sees_questions を真にすると、状態も質問を見る (比較実験用。質問同士の独立は崩れる)。
 
   question_independence:
     ja: 質問同士の独立
@@ -415,13 +419,8 @@ concepts:
     layer: training
     definition: 学習データの 1 単位。1 つの状態 + 複数の質問 + labels (JSONL の state / questions / labels)。
     relations: {uses: [state, question, label]}
-    code:
-      - local_decision_model.distill.Example
-      - local_decision_model.distill.load_examples
-      - local_decision_model.train.Example
-      - local_decision_model.train.load_jsonl
-    files: [data/sample.jsonl, data/sample-pairs.jsonl]
-    note: train.Example はペアの学習データ (1 行 = 1 ペアとラベル)。train はまだこちらだけを読む (フェーズ 3 で移す)。
+    code: [local_decision_model.distill.Example, local_decision_model.distill.load_examples]
+    files: [data/sample.jsonl, data/train-claude.jsonl]
 
   label:
     ja: ラベル
@@ -435,9 +434,9 @@ concepts:
     ja: ファインチューニング
     en: fine-tuning
     layer: training
-    definition: ベースモデルを判断ロジットに対して学習すること。終わりに温度を較正して保存する。
+    definition: ベースモデルを判断ロジットに対して学習すること。終わりに温度を較正して保存する。ペア方式とパック方式の両方でできる。
     relations: {uses: [example, base_model], produces: [model_dir]}
-    code: [local_decision_model.train.train]
+    code: [local_decision_model.train.train, local_decision_model.train.fit]
     aliases: [学習]
 
   zero_shot:
@@ -460,17 +459,28 @@ concepts:
     ja: 蒸留
     en: distillation
     layer: training
-    status: planned
     definition: 教師の確率をソフトラベルにして学習すること。パック方式が教師の答えを 1 回の推論で再現するようにする。
     relations: {is_a: [fine_tuning], uses: [teacher]}
+    code: [local_decision_model.train.question_loss]
+    note: 損失は、noul がソフトラベルの BCE、choice が教師の分布とのクロスエントロピー。
+
+  val_set:
+    ja: 検証データ
+    en: validation set
+    layer: training
+    definition: 学習データから分けた、学習に使わない行 (既定は 1 割)。温度の較正に使う。
+    relations: {uses: [example], contrasts_with: [eval_set]}
+    code: [local_decision_model.train.split]
+    note: ラベルは教師のもの。人が正解を付けた評価セットとは別。
 
   eval_set:
     ja: 評価セット
     en: eval set
     layer: training
-    definition: 人が正解を付けた、学習用とは別のデータ。較正と正解率はこちらで測る。
+    definition: 人が正解を付けた、学習用とは別のデータ。較正の良さと正解率はこちらで測る。
+    code: [local_decision_model.evaluate.score, local_decision_model.evaluate.metrics]
     files: [scripts/phase0/ja_eval.yaml, data/eval-states.jsonl, data/eval-draft.jsonl]
-    note: eval-draft.jsonl は Claude Code (Opus) が付けた下書きで、人の見直しはまだ。較正に使う検証データ (学習データから分けたもの) とは別。
+    note: eval-draft.jsonl は Claude Code (Opus) が付けた下書きで、人の見直しはまだ。温度を求めるのは検証データで、評価セットではない。
 
   agreement:
     ja: 一致
@@ -518,7 +528,7 @@ concepts:
     en: phase
     layer: environment
     definition: プランの作業の区切り (0〜6)。結果は docs/phaseN-results.md に書く。
-    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md, docs/phase2-results.md]
+    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md, docs/phase2-results.md, docs/phase3-results.md]
 
   system_one:
     ja: System One

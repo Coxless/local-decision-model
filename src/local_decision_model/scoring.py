@@ -34,6 +34,7 @@ class InferenceConfig:
     max_state_tokens: int = 384  # [CLS] と [SEP] を含む
     marker_position: str = "cls"  # マーカーの位置番号。"cls": 0 / "after": 質問の先頭
     choice_layout: str = "shared"  # "shared": 指示を共有 / "expanded": 選択肢ごとの仮説文
+    state_sees_questions: bool = False  # 真: 状態も質問を見る (比較実験用。質問同士が干渉する)
 
     @classmethod
     def load(cls, model_dir: str | Path) -> InferenceConfig:

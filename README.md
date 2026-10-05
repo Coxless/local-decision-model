@@ -187,6 +187,7 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 | `train`  | ✓ |  | ファインチューニング + 温度較正（`--arch pair` / `packed`） |
 | `evaluate` | ✓ |  | 学習データと同じ形式の JSONL で正解率・NLL・ECE を出す |
 | `export` | ✓ |  | OpenVINO IR に変換 |
+| `hf` | ✓ | ✓ | Hugging Face Hub の CLI（モデルディレクトリのアップロードと取得。引数はそのまま渡す） |
 
 `decide` / `bench` の引数は後ろに足せます（例: `workshop run npu -- bench --batch-size 4 --runs 500`）。
 

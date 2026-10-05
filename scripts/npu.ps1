@@ -4,12 +4,12 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 <action> [args...]
-#   actions: setup | check | test | decide | bench
+#   actions: setup | check | test | decide | bench | hf
 #   e.g.     powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 bench --device NPU
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("setup", "check", "test", "decide", "bench")]
+    [ValidateSet("setup", "check", "test", "decide", "bench", "hf")]
     [string]$Action,
 
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -58,5 +58,10 @@ switch ($Action) {
     }
     "bench" {
         Invoke-Checked uv ($cli + @("bench", "--backend", "openvino", "--device", "NPU") + $Rest)
+    }
+    # Hugging Face Hub CLI (installed with transformers). Used to fetch model directories.
+    # e.g. npu.ps1 hf download <user>/local-decision-model --include "base-ov/*" --local-dir models
+    "hf" {
+        Invoke-Checked uv (@("run", "hf") + $Rest)
     }
 }

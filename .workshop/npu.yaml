@@ -42,3 +42,10 @@ actions:
   bench: |
     cd /project
     uv run python -m local_decision_model bench --backend openvino --device NPU "$@"
+
+  # Hugging Face Hub の CLI (transformers と一緒に入る)。モデルディレクトリの転送に使う。
+  # 例: workshop run npu -- hf auth login
+  #     workshop run npu -- hf download <ユーザー名>/local-decision-model --include 'base-ov/*' --local-dir models
+  hf: |
+    cd /project
+    uv run hf "$@"

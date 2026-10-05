@@ -114,6 +114,27 @@ def test_order_does_not_matter(model, variant):
     np.testing.assert_allclose(z["d"], z2["d"][[1, 0]], atol=1e-5)
 
 
+def test_state_sees_questions_breaks_independence(base):
+    """比較実験用の設定では、状態が質問を見るので、他の質問の有無で答えが変わる。"""
+    model = PackedModel(base, state_sees_questions=True).eval()
+    together, _ = score(model, STATE, QUESTIONS, config())
+    alone, _ = score(model, STATE, {"a": QUESTIONS["a"]}, config())
+    assert abs(together["a"][0] - alone["a"][0]) > 1e-3
+
+
+def test_save_and_load_keeps_role_embeddings(base, tmp_path):
+    model = PackedModel(base).eval()
+    with torch.no_grad():
+        model.role_embeddings.weight.normal_()
+    model.save_pretrained(tmp_path)
+    loaded = PackedModel.from_pretrained(str(tmp_path)).eval()
+    z, _ = score(model, STATE, QUESTIONS, config())
+    z2, _ = score(loaded, STATE, QUESTIONS, config())
+    assert_same(z, z2)
+    with torch.no_grad():
+        model.role_embeddings.weight.zero_()  # base は module スコープなので元に戻す
+
+
 def test_answers_differ_between_questions(model):
     # マスクが効きすぎて質問を見ていない、ということがないこと
     z, _ = score(model, STATE, QUESTIONS, config())

@@ -41,12 +41,14 @@ class Decider:
         z = np.asarray(self.scorer.score(pairs))
         return {name: z[span] for name, span in spans.items()}
 
-    def decide(self, state: str, questions: dict[str, Question]) -> dict[str, Answer]:
+    def logits(self, state: str, questions: dict[str, Question]) -> dict[str, np.ndarray]:
+        """質問名 → 判断ロジット (choice は選択肢の順)。温度をかける前の値。"""
         if hasattr(self.scorer, "score_questions"):
-            z = self.scorer.score_questions(state, questions)
-        else:
-            z = self._score_pairs(state, questions)
+            return self.scorer.score_questions(state, questions)
+        return self._score_pairs(state, questions)
 
+    def decide(self, state: str, questions: dict[str, Question]) -> dict[str, Answer]:
+        z = self.logits(state, questions)
         answers: dict[str, Answer] = {}
         for name, q in questions.items():
             zq = np.asarray(z[name], dtype=np.float64)

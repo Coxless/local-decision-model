@@ -1,4 +1,6 @@
-"""コマンドライン: python -m local_decision_model <devices|decide|bench|distill|train|export>
+"""コマンドライン: python -m local_decision_model <コマンド>
+
+コマンドは devices / decide / bench / distill / train / evaluate / export。
 
 torch / openvino はそれぞれの extra を入れたワークショップでしか使えないので、
 必要なときだけ import する。
@@ -124,15 +126,34 @@ def cmd_train(args) -> None:
         args.data,
         args.out,
         args.base_model,
+        arch=args.arch,
         device=args.device,
         val_data=args.val_data,
+        eval_data=args.eval_data,
         epochs=args.epochs,
         batch_size=args.batch_size,
         lr=args.lr,
         max_length=args.max_length,
+        max_questions=args.max_questions,
+        max_tokens=args.max_tokens,
+        state_sees_questions=args.state_sees_questions,
+        seed=args.seed,
         fp16=args.fp16,
     )
     print(json.dumps(report, indent=2))
+
+
+def cmd_evaluate(args) -> None:
+    from .distill import load_examples
+    from .evaluate import metrics, score
+
+    decider = make_decider(args)
+    scores = score(decider, load_examples(args.data))
+    report = metrics(scores, decider.temperature, decider.temperature_choice)
+    text = json.dumps(report, indent=2)
+    if args.out:
+        Path(args.out).write_text(text + "\n")
+    print(text)
 
 
 def cmd_export(args) -> None:
@@ -148,12 +169,7 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("devices", help="使えるデバイスを表示する").set_defaults(func=cmd_devices)
 
-    for name, func, help_ in [
-        ("decide", cmd_decide, "リクエスト YAML に回答する"),
-        ("bench", cmd_bench, "レイテンシを計測する"),
-    ]:
-        s = sub.add_parser(name, help=help_)
-        s.add_argument("request", nargs="?", default="examples/review.yaml")
+    def add_model_arguments(s) -> None:
         s.add_argument("--backend", choices=["torch", "openvino"], default="torch")
         s.add_argument("--device", default="cuda", help="torch: cuda/cpu, openvino: NPU/GPU/CPU")
         s.add_argument(
@@ -167,6 +183,14 @@ def main(argv: list[str] | None = None) -> None:
             choices=["pair", "packed"],
             help="pair: (状態, 仮説) ごとに推論 / packed: 1 本の系列に詰めて推論 (既定は s1.json)",
         )
+
+    for name, func, help_ in [
+        ("decide", cmd_decide, "リクエスト YAML に回答する"),
+        ("bench", cmd_bench, "レイテンシを計測する"),
+    ]:
+        s = sub.add_parser(name, help=help_)
+        s.add_argument("request", nargs="?", default="examples/review.yaml")
+        add_model_arguments(s)
         s.set_defaults(func=func)
         if name == "bench":
             s.add_argument("--runs", type=int, default=100)
@@ -187,20 +211,40 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--batch-size", type=int, default=32)
     s.set_defaults(func=cmd_distill)
 
-    s = sub.add_parser("train", help="JSONL でファインチューニングし、温度を較正する")
-    s.add_argument("data")
+    s = sub.add_parser("train", help="学習データでファインチューニングし、温度を較正する")
+    s.add_argument("data", help="JSONL。1 行 = 1 つの状態 + 複数の質問 + labels")
     s.add_argument("--out", default="models/finetuned")
     s.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
-    s.add_argument("--val-data")
+    s.add_argument("--arch", choices=["pair", "packed"], default="pair")
+    s.add_argument("--val-data", help="検証データ (なければ学習データから 1 割を分ける)")
+    s.add_argument("--eval-data", help="評価セット。較正した温度のまま指標を出す")
     s.add_argument("--device", default="cuda")
     s.add_argument("--epochs", type=int, default=3)
-    s.add_argument("--batch-size", type=int, default=16)
+    s.add_argument("--batch-size", type=int, default=8, help="1 ステップの状態の数")
     s.add_argument("--lr", type=float, default=3e-5)
-    s.add_argument("--max-length", type=int, default=256)
+    s.add_argument("--max-length", type=int, default=256, help="ペア方式の系列長")
+    s.add_argument(
+        "--max-questions", type=int, help="1 つの状態から選ぶ質問の数の上限 (既定は全部)"
+    )
+    s.add_argument(
+        "--max-tokens", type=int, default=2048, help="1 回の順伝播に入れるトークン数の上限"
+    )
+    s.add_argument(
+        "--state-sees-questions",
+        action="store_true",
+        help="パック方式で、状態のトークンも質問を見る (比較実験用)",
+    )
+    s.add_argument("--seed", type=int, default=0)
     s.add_argument(
         "--fp16", action="store_true", help="混合精度で学習する (Tensor コアのある GPU 向け)"
     )
     s.set_defaults(func=cmd_train)
+
+    s = sub.add_parser("evaluate", help="学習データと同じ形式の JSONL で、正解率・NLL・ECE を出す")
+    s.add_argument("data", help="JSONL。1 行 = 1 つの状態 + 複数の質問 + labels")
+    add_model_arguments(s)
+    s.add_argument("--out", help="指標を書く JSON ファイル")
+    s.set_defaults(func=cmd_evaluate)
 
     s = sub.add_parser("export", help="OpenVINO IR に変換する (NPU 用)")
     s.add_argument("--model", default=DEFAULT_BASE_MODEL, help="HF ID か学習済みディレクトリ")

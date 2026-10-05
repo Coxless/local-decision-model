@@ -62,8 +62,8 @@ class TorchPackedScorer:
         self.device = resolve_device(device)
         self.config = config or InferenceConfig(arch="packed")
         self.tokenizer = AutoTokenizer.from_pretrained(model)
-        base = AutoModelForSequenceClassification.from_pretrained(model, dtype=torch.float32)
-        self.model = PackedModel(base).to(self.device).eval()
+        packed = PackedModel.from_pretrained(model, self.config.state_sees_questions)
+        self.model = packed.to(self.device).eval()
 
     @torch.inference_mode()
     def score_questions(self, state: str, questions: dict[str, Question]) -> dict[str, np.ndarray]:

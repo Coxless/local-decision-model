@@ -52,6 +52,7 @@ local-decision-model/
 │   ├── distill.py            # 学習データの形式と、ペア方式のモデルによるラベル付け (比較用)
 │   ├── train.py              # ファインチューニング (ペア方式 / パック方式) と温度較正
 │   ├── evaluate.py           # 判断ロジットの収集、温度の較正、評価指標
+│   ├── server.py             # ローカルサーバー (System One の HTTP API と互換)
 │   └── cli.py                # python -m local_decision_model ...
 ├── examples/review.yaml      # リクエスト例
 ├── data/
@@ -171,17 +172,63 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 
 ## 出力例
 
+回答の形は System One API と同じです。
+
 ```json
 {
   "answers": {
-    "positive":   {"type": "noul", "value": true, "probability": 0.97},
-    "recommends": {"type": "noul", "value": true, "probability": 0.81},
-    "genre":      {"type": "choice", "value": "a novel",
-                   "probabilities": {"a novel": 0.93, "a cookbook": 0.02, "a science textbook": 0.05}}
+    "positive":   {"type": "noul", "noul": 0.97},
+    "recommends": {"type": "noul", "noul": 0.81},
+    "genre":      {"type": "choice", "choice": "a novel",
+                   "probabilities": {"a novel": 0.93, "a cookbook": 0.02, "a science textbook": 0.05},
+                   "confidence": 0.895}
   },
   "latency_ms": 12.3
 }
 ```
+
+`confidence` は、確率が 1 つの選択肢にどれだけ集中しているかです（`(n·p_max − 1) / (n − 1)`）。
+
+## ローカルサーバー
+
+常駐するサーバーがモデルを持ち、アプリは HTTP で問い合わせます。API は
+[TypeSafe の System One API](https://docs.typesafe.ai/api.md) と同じ形なので、jev 用に書いたアプリは
+ベース URL を変えるだけで使えます。
+
+```bash
+workshop run gpu -- serve --model models/packed                                    # torch / cuda
+workshop run gpu -- serve --model models/packed-ov --backend openvino --device CPU
+```
+
+```bash
+curl http://gpu.<プロジェクトのディレクトリ名>.wp:8642/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": "先週注文した掃除機がまだ届きません。今日中に返金してください！",
+  "model": "jev-latest",
+  "questions": {
+    "refund": {"type": "noul", "instructions": "顧客は返金を求めていますか？"},
+    "department": {"type": "choice", "instructions": "どの担当に回すべきですか？",
+                   "criteria": {"請求": "支払い、請求、返金", "技術": "不具合、障害、ログイン"}}
+  }
+}'
+```
+
+公式の Python SDK（`typesafe-sdk`）からは、`TypeSafeClient(api_key="unused", base_url="http://…:8642")`
+か環境変数 `TYPESAFE_BASE_URL` で接続先を変えます。
+
+| パス | 内容 |
+| ---- | ---- |
+| `POST /v1/systemone` | 状態 + 質問 → 回答。`model` は `local-decision-model-<モデルディレクトリ名>` か `jev-*` |
+| `GET /v1/models` | 使えるモデルの名前 |
+| `GET /health` | 状態確認。モデルの読み込み中（OpenVINO のコンパイル中）は `503` |
+
+- 既定では `127.0.0.1:8642` で待ち受けます。ワークショップの中の localhost はホストから見えないので、
+  `serve` の action は `--host 0.0.0.0` を付けています。ホストからは
+  `http://<ワークショップ名>.<プロジェクトのディレクトリ名>.wp:8642` でつながります
+  （ワークショップのネットワークはホストの中だけで、外部には公開されません）。
+- 認証はありません（`Authorization` ヘッダーは見ません）。推論は 1 つずつ順番に行います。
+- `score` と、オブジェクトや配列で書いた `instructions` / `criteria` には未対応です（`422` を返します）。
+  `state` のオブジェクトや配列は、JSON 文字列にして扱います。
+- noul は `criteria.true` があればそれを仮説文に使い、choice は `criteria` のキーを選択肢、値を説明として使います。
 
 ## actions
 
@@ -193,13 +240,14 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 | `lint` / `fmt` | ✓ |  | ruff |
 | `decide` | ✓ | ✓ | リクエスト YAML に回答（既定 `examples/review.yaml`） |
 | `bench`  | ✓ | ✓ | レイテンシ計測 |
+| `serve`  | ✓ | ✓ | System One API と互換のローカルサーバー（既定のポート 8642） |
 | `distill` | ✓ |  | 状態と質問セットにペア方式の確率を付ける（比較用） |
 | `train`  | ✓ |  | ファインチューニング + 温度較正（`--arch pair` / `packed`） |
 | `evaluate` | ✓ |  | 学習データと同じ形式の JSONL で正解率・NLL・ECE を出す |
 | `export` | ✓ |  | OpenVINO IR に変換 |
 | `hf` | ✓ | ✓ | Hugging Face Hub の CLI（モデルディレクトリのアップロードと取得。引数はそのまま渡す） |
 
-`decide` / `bench` の引数は後ろに足せます（例: `workshop run npu -- bench --batch-size 4 --runs 500`）。
+`decide` / `bench` / `serve` の引数は後ろに足せます（例: `workshop run npu -- bench --batch-size 4 --runs 500`）。
 
 ## ワークショップについての注意
 
@@ -216,6 +264,6 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 
 - パック方式の IR を NPU で動かす（`docs/plan.md` のフェーズ 4。NPU PC が用意できてから）。
   開発 PC での結果は `docs/phase4-results.md`。
-- ローカルサーバー（TypeSafe の HTTP API と互換。フェーズ 6）。
+- ローカルサーバーを NPU で動かす、`score` に対応する（フェーズ 6 の残り）。
 - INT8 量子化（NNCF）で NPU のレイテンシをさらに下げる。
 - 数値・リストなど noul / choice 以外の型。

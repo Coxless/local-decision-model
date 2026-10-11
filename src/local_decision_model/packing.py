@@ -58,7 +58,7 @@ def _groups(encode, questions: dict[str, Question], choice_layout: str) -> list[
     groups = []
     for name, q in questions.items():
         if isinstance(q, Noul):
-            groups.append(_Group(encode(q.instructions), (name, 0), []))
+            groups.append(_Group(encode(q.hypotheses()[0]), (name, 0), []))
         elif isinstance(q, Choice) and choice_layout == "expanded":
             # 選択肢ごとの仮説文を、独立した質問として詰める (ペア方式と同じ文になる)
             for i, hyp in enumerate(q.hypotheses()):
@@ -68,7 +68,7 @@ def _groups(encode, questions: dict[str, Question], choice_layout: str) -> list[
             prefix, _, suffix = q.instructions.partition("{option}")
             options = [
                 (encode(o + suffix.replace("{option}", o)), (name, i))
-                for i, o in enumerate(q.options)
+                for i, o in enumerate(q.option_texts())
             ]
             groups.append(_Group(encode(prefix), None, options))
     return groups

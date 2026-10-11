@@ -69,7 +69,7 @@ def sample_questions(
         if isinstance(q, Choice):
             options = list(q.options)
             rng.shuffle(options)
-            q = Choice(q.instructions, tuple(options))
+            q = q.reordered(options)
             probs[name] = [example.labels[name][o] for o in options]
         else:
             probs[name] = [example.labels[name]]

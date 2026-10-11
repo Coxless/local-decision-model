@@ -43,6 +43,14 @@ actions:
     cd /project
     uv run python -m local_decision_model bench --backend openvino --device NPU "$@"
 
+  # System One API と互換のローカルサーバー (既定のポートは 8642)。
+  # ワークショップの localhost はホストから見えないので、0.0.0.0 で待ち受ける
+  # (ホストからは http://npu.<プロジェクトのディレクトリ名>.wp:8642。ワークショップのネットワークはホストの中だけ)。
+  # 例: workshop run npu -- serve --model models/packed-ov
+  serve: |
+    cd /project
+    uv run python -m local_decision_model serve --backend openvino --device NPU --host 0.0.0.0 "$@"
+
   # Hugging Face Hub の CLI (transformers と一緒に入る)。モデルディレクトリの転送に使う。
   # 例: workshop run npu -- hf auth login
   #     workshop run npu -- hf download <ユーザー名>/local-decision-model --include 'base-ov/*' --local-dir models

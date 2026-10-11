@@ -107,6 +107,16 @@ workshop run gpu -- decide --model models/finetuned
 workshop run gpu -- export --model models/finetuned --out models/finetuned-ov
 ```
 
+`export` は、モデルディレクトリの `s1.json` に書かれた方式（ペア方式かパック方式）の IR を作ります。
+NPU PC がなくても、開発 PC の OpenVINO の CPU で IR を動かして確かめられます:
+
+```bash
+workshop run gpu -- export --model models/packed --out models/packed-ov
+workshop run gpu -- decide --backend openvino --device CPU --model models/packed-ov
+workshop run gpu -- evaluate data/eval-draft.jsonl --backend openvino --device CPU --model models/packed-ov
+workshop run gpu -- bench examples/bench/*.yaml --model models/packed   # 質問の数を変えた条件をまとめて測る
+```
+
 `train` は `--arch pair`（既定）か `--arch packed` で方式を選びます。どちらも同じ学習データを読み、終わりに検証データ
 （学習データから分けた 1 割）で noul と choice の温度を別々に較正します。`--eval-data` を付けると、評価セットの指標も出します。
 
@@ -204,6 +214,8 @@ NPU の初回コンパイルは時間がかかるので、結果を `.cache/open
 
 ## 今後
 
-- パック方式の OpenVINO エクスポートと NPU 推論（`docs/plan.md` のフェーズ 4）。学習の結果は `docs/phase3-results.md`。
+- パック方式の IR を NPU で動かす（`docs/plan.md` のフェーズ 4。NPU PC が用意できてから）。
+  開発 PC での結果は `docs/phase4-results.md`。
+- ローカルサーバー（TypeSafe の HTTP API と互換。フェーズ 6）。
 - INT8 量子化（NNCF）で NPU のレイテンシをさらに下げる。
 - 数値・リストなど noul / choice 以外の型。

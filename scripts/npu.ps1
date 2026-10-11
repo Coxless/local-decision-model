@@ -4,12 +4,12 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 <action> [args...]
-#   actions: setup | check | test | decide | bench | hf
+#   actions: setup | check | test | decide | bench | serve | hf
 #   e.g.     powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 bench --device NPU
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("setup", "check", "test", "decide", "bench", "hf")]
+    [ValidateSet("setup", "check", "test", "decide", "bench", "serve", "hf")]
     [string]$Action,
 
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -58,6 +58,12 @@ switch ($Action) {
     }
     "bench" {
         Invoke-Checked uv ($cli + @("bench", "--backend", "openvino", "--device", "NPU") + $Rest)
+    }
+    # Local server compatible with the System One API. Listens on 127.0.0.1:8642 by default
+    # (no container here, so unlike .workshop/npu.yaml it does not pass --host 0.0.0.0).
+    # e.g. npu.ps1 serve --model models/packed-ov
+    "serve" {
+        Invoke-Checked uv ($cli + @("serve", "--backend", "openvino", "--device", "NPU") + $Rest)
     }
     # Hugging Face Hub CLI (installed with transformers). Used to fetch model directories.
     # e.g. npu.ps1 hf download <user>/local-decision-model --include "base-ov/*" --local-dir models

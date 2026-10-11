@@ -1,6 +1,6 @@
 """コマンドライン: python -m local_decision_model <コマンド>
 
-コマンドは devices / decide / bench / distill / train / evaluate / export。
+コマンドは devices / decide / bench / serve / distill / train / evaluate / export。
 
 torch / openvino はそれぞれの extra を入れたワークショップでしか使えないので、
 必要なときだけ import する。
@@ -13,15 +13,17 @@ import json
 import statistics
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 import yaml
 
 from .decide import Decider
-from .schema import parse_questions
+from .schema import parse_questions, state_text
 from .scoring import DEFAULT_BASE_MODEL, InferenceConfig
 
 DEFAULT_IR_DIR = "models/base-ov"
+DEFAULT_PORT = 8642  # serve の既定のポート
 
 
 def make_scorer(args):
@@ -57,7 +59,7 @@ def make_decider(args) -> Decider:
 def load_request(path: str) -> tuple[str, dict]:
     with open(path, encoding="utf-8") as f:
         req = yaml.safe_load(f)
-    return req["state"], parse_questions(req["questions"])
+    return state_text(req["state"]), parse_questions(req["questions"])
 
 
 def cmd_devices(_args) -> None:
@@ -110,6 +112,33 @@ def cmd_bench(args) -> None:
             f"p95={times[int(0.95 * (len(times) - 1))]:.2f}ms  min={times[0]:.2f}ms",
             flush=True,
         )
+
+
+def cmd_serve(args) -> None:
+    import uvicorn
+
+    from .schema import Noul
+    from .server import ModelInfo, create_app, model_name
+
+    scorer_model = args.model or (DEFAULT_BASE_MODEL if args.backend == "torch" else DEFAULT_IR_DIR)
+    path = Path(scorer_model)
+    released = date.fromtimestamp(path.stat().st_mtime) if path.exists() else date.today()
+    info = ModelInfo(
+        model_name(scorer_model),
+        f"{scorer_model} ({args.backend}/{args.device})",
+        released.isoformat(),
+    )
+
+    def load() -> Decider:
+        decider = make_decider(args)
+        # 最初のリクエストを待たせないように、コンパイルと 1 回目の推論をここで済ませる
+        if hasattr(decider.scorer, "compile_all"):
+            decider.scorer.compile_all()
+        decider.decide("warmup", {"warmup": Noul("warmup")})
+        print(f"モデルを読み込みました: {info.name}", flush=True)
+        return decider
+
+    uvicorn.run(create_app(load, info), host=args.host, port=args.port)
 
 
 def cmd_distill(args) -> None:
@@ -207,6 +236,12 @@ def main(argv: list[str] | None = None) -> None:
         if name == "bench":
             s.add_argument("--runs", type=int, default=100)
             s.add_argument("--warmup", type=int, default=10)
+
+    s = sub.add_parser("serve", help="System One API と互換のローカルサーバーを起動する")
+    s.add_argument("--host", default="127.0.0.1", help="既定は localhost のみ (外部に公開しない)")
+    s.add_argument("--port", type=int, default=DEFAULT_PORT)
+    add_model_arguments(s)
+    s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("distill", help="状態と質問セットにペア方式の確率を付ける (比較用)")
     s.add_argument("states", help='JSONL。1 行 = {"state": "..."}')

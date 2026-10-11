@@ -43,7 +43,7 @@ concepts:
     en: request
     layer: interface
     definition: 1 つの状態と、名前付きの質問の集まり。1 回の decide の入力。
-    code: [local_decision_model.cli.load_request]
+    code: [local_decision_model.cli.load_request, local_decision_model.server.SystemOneRequest]
     files: [examples/review.yaml, examples/bench/]
     external: {typesafe: "POST /v1/systemone の本文 (state / model / questions)"}
 
@@ -53,7 +53,8 @@ concepts:
     layer: interface
     definition: 判断の材料になる自由テキスト。質問はすべてこの状態について答える。
     relations: {part_of: [request]}
-    external: {typesafe: "state (オブジェクトや配列も可。ここでは文字列のみ)", nli: premise}
+    code: [local_decision_model.schema.state_text]
+    external: {typesafe: "state (オブジェクトや配列は JSON 文字列にして扱う)", nli: premise}
     files: [data/states.jsonl, scripts/phase2/generate_states.py]
     note: パック方式では状態のトークンは質問を見ない (question_ids が 0)。
 
@@ -112,12 +113,26 @@ concepts:
     relations: {part_of: [question], produces: [hypothesis]}
     code: [local_decision_model.schema.Noul, local_decision_model.schema.Choice]
     external: {typesafe: "instructions (疑問文で書く)"}
+    note: オブジェクトや配列で書いた instructions には未対応 (サーバーは 422 を返す)。
+
+  criteria:
+    ja: criteria
+    en: criteria
+    layer: interface
+    definition: 質問に付ける判断の基準。noul は true の説明を仮説文にし、choice はキーが選択肢、値がその説明になる。
+    relations: {part_of: [question], produces: [hypothesis, option]}
+    code:
+      - local_decision_model.schema.parse_question
+      - local_decision_model.schema.Noul
+      - local_decision_model.schema.Choice.option_texts
+    external: {typesafe: criteria}
+    note: noul の criteria.false は使わない。choice の説明は「選択肢 (説明)」の形で仮説文に入る。
 
   option:
     ja: 選択肢
     en: option
     layer: interface
-    definition: choice の答えの候補。2 つ以上で、重複しない。
+    definition: choice の答えの候補。2 つ以上 255 個以下で、重複しない。
     relations: {part_of: [choice]}
     code: [local_decision_model.schema.Choice]
     external: {typesafe: "criteria のキー (値は説明文)"}
@@ -155,11 +170,25 @@ concepts:
     ja: confidence
     en: confidence
     layer: interface
-    status: planned
     definition: 確率の分布がどれだけ 1 つの答えに集中しているか (0〜1)。choice は (n·p_max − 1) / (n − 1)。
     relations: {uses: [probability]}
+    code: [local_decision_model.schema.ChoiceAnswer.confidence]
     external: {typesafe: confidence}
     note: 確率そのものとは別の値。
+
+  server:
+    ja: サーバー
+    en: server
+    layer: interface
+    definition: 常駐して、System One の HTTP API と同じ形でリクエストを受けて回答を返す部品。モデルは起動時に 1 回だけ読み込む。
+    relations: {uses: [decider, request], produces: [answer]}
+    code:
+      - local_decision_model.server.create_app
+      - local_decision_model.server.ModelInfo
+      - local_decision_model.cli.cmd_serve
+    files: [tests/test_server.py]
+    external: {typesafe: "POST /v1/systemone、GET /v1/models"}
+    note: 推論は 1 つずつ順番に行う。認証はしない。score には未対応 (422 を返す)。
 
   # ---------------------------------------------------------------- inference
   hypothesis:
@@ -525,7 +554,7 @@ concepts:
     ja: action
     en: action
     layer: environment
-    definition: ワークショップに定義したコマンド (setup / check / test / decide / bench など)。
+    definition: ワークショップに定義したコマンド (setup / check / test / decide / bench / serve など)。
     relations: {part_of: [workshop]}
     files: [.workshop/gpu.yaml, .workshop/npu.yaml, scripts/npu.ps1]
     note: actions を変えるときは npu.ps1 も同時に直す。
@@ -542,10 +571,11 @@ concepts:
       - docs/phase2-results.md
       - docs/phase3-results.md
       - docs/phase4-results.md
+      - docs/phase6-results.md
 
   system_one:
     ja: System One
     en: System One
     layer: environment
-    definition: TypeSafe の判断モデル (jev) とその API。このプロジェクトが入出力の形をならう相手で、フェーズ 6 で HTTP API を互換にする。
+    definition: TypeSafe の判断モデル (jev) とその API。このプロジェクトが入出力の形をならう相手で、サーバーの HTTP API を互換にしている。
     aliases: [jev, TypeSafe API]

@@ -65,6 +65,14 @@ actions:
     cd /project
     uv run python -m local_decision_model bench --backend torch --device cuda "$@"
 
+  # System One API と互換のローカルサーバー (既定のポートは 8642)。
+  # ワークショップの localhost はホストから見えないので、0.0.0.0 で待ち受ける
+  # (ホストからは http://gpu.<プロジェクトのディレクトリ名>.wp:8642。ワークショップのネットワークはホストの中だけ)。
+  # 例: workshop run gpu -- serve --model models/packed
+  serve: |
+    cd /project
+    uv run python -m local_decision_model serve --backend torch --device cuda --host 0.0.0.0 "$@"
+
   # Hugging Face Hub の CLI (transformers と一緒に入る)。モデルディレクトリの転送に使う。
   # 例: workshop run gpu -- hf auth login
   #     workshop run gpu -- hf upload <ユーザー名>/local-decision-model models/packed packed --private

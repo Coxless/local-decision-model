@@ -15,7 +15,7 @@ torch の GPU (cuda) と OpenVINO の CPU。NPU PC が要る作業は、各フ�
 | 順番 | 作業 | 先にやる理由 |
 |---|---|---|
 | 1 (完了) | フェーズ 4 の開発 PC 分 (パック方式のエクスポート、OpenVINO の CPU での推論、torch との一致) | NPU 向けの形 (固定長、静的な形状) にするところまでは NPU なしでできる。NPU PC が来たら、転送して測るだけになる |
-| 2 | フェーズ 6 のサーバー (torch の GPU と OpenVINO の CPU で動かす) | API の層はバックエンドによらない。NPU で動かなくても作り直しにならず、開発 PC でアプリから使い始められる |
+| 2 (完了) | フェーズ 6 のサーバー (torch の GPU と OpenVINO の CPU で動かす) | API の層はバックエンドによらない。NPU で動かなくても作り直しにならず、開発 PC でアプリから使い始められる |
 | 3 | 精度の確認 (フェーズ 3 の持ち越し) | 学習にない質問での正解率と、弱い質問。評価セットを人が見直す作業は、いったん見送る |
 | 4 | フェーズ 5 の開発 PC 分 (保留の判定、README、INT8 の精度の確認) | INT8 の速さは NPU でしか分からないので、最後に回す |
 | 5 | NPU PC が要る作業 (フェーズ 0-b → 4 → 5 → 6 の順) | NPU PC が用意できてから |
@@ -218,7 +218,7 @@ ECE はペア方式と同等以下。結果は noul が −0.3 ポイント、ch
 
 ## フェーズ 4: エクスポートと NPU 推論
 
-**開発 PC でできる** — IR を上げる作業を除いて完了。結果は [phase4-results.md](phase4-results.md)
+**開発 PC でできる** — 完了。結果は [phase4-results.md](phase4-results.md)
 
 - [x] `export.py`: パック方式のモデルを OpenVINO IR に変換する
       (入力は `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index`、出力は `decision_logits[1, M]`)
@@ -229,7 +229,7 @@ ECE はペア方式と同等以下。結果は noul が −0.3 ポイント、ch
 - [x] `bench` を拡張する: 質問 1 / 3 / 10 個、choice の選択肢 20 個の各条件で、
       ペア方式とパック方式の速さを比べる。開発 PC では torch の GPU と OpenVINO の CPU で測る
 - [x] GPU (torch) と CPU (OpenVINO) の両方で動作確認し、評価セットの指標が torch と変わらないことを確かめる
-- [ ] IR を Hugging Face Hub の `Coxless/local-decision-model` に上げる
+- [x] IR を Hugging Face Hub の `Coxless/local-decision-model` に上げる
 
 **NPU PC が要る**
 
@@ -273,30 +273,30 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 |---|---|
 | `POST /v1/systemone`、本文は `state` / `model` / `questions` | 対応する。`model` は `local-decision-model-…` のような独自の名前にし、`jev-latest` などは既定のモデルの別名として受け付ける |
 | `state` が文字列 | そのまま使う |
-| `state` がオブジェクトや配列 | JSON 文字列にしてから状態テキストとして扱う (精度は要検証) |
-| `noul` (+ `criteria.true` / `false`) | 対応する。回答は `{"type": "noul", "noul": p}`。`criteria.true` があれば仮説文に使う |
-| `choice` (`criteria` は選択肢 → 説明、最大 255) | 対応する。回答は `choice` / `probabilities` / `confidence`。選択肢が多いときはパック方式を複数回に分けて推論する |
-| `score` (最大 10 段階の順序付きの水準) | 後から対応する。水準を choice として確率を出し、`score` = 確率で重み付けした平均、`legend` を付ける |
-| `instructions` がオブジェクトや配列 | 後から対応する。まずは文字列だけ |
-| `confidence` | ドキュメントの式に合わせる。choice は `(n·p_max − 1) / (n − 1)`、score は「最大の水準からの確率の広がり」を一様分布の広がりで割って 1 から引いたもの。公式の実装と同じか要確認 |
-| `usage` (`input_tokens` / `output_tokens`) | `input_tokens` はトークン数、`output_tokens` は 0 を返す |
-| モデル一覧 (SDK の `client.models.list()`) | 対応する。HTTP のパスは SDK のソースで要確認 |
-| エラー (`422`、`429` など) | `422` (検証エラー) は同じ形で返す。認証はなし (`Authorization` ヘッダーは無視する) |
+| `state` がオブジェクトや配列 | 対応済み。JSON 文字列にしてから状態テキストとして扱う (精度は要検証) |
+| `noul` (+ `criteria.true` / `false`) | 対応済み。回答は `{"type": "noul", "noul": p}`。`criteria.true` があれば仮説文に使う (`false` は使わない) |
+| `choice` (`criteria` は選択肢 → 説明、最大 255) | 対応済み。回答は `choice` / `probabilities` / `confidence`。説明は「選択肢 (説明)」の形で仮説文に入れる。選択肢が多いときはパック方式を複数回に分けて推論する |
+| `score` (最大 10 段階の順序付きの水準) | 後から対応する (いまは `422`)。水準を choice として確率を出し、`score` = 確率で重み付けした平均、`legend` を付ける |
+| `instructions` / `criteria` の値がオブジェクトや配列 | 後から対応する。まずは文字列だけ (いまは `422`) |
+| `confidence` | choice は対応済み。ドキュメントの式に合わせる。choice は `(n·p_max − 1) / (n − 1)`、score は「最大の水準からの確率の広がり」を一様分布の広がりで割って 1 から引いたもの。公式の実装と同じか要確認 |
+| `usage` (`input_tokens` / `output_tokens`) | 対応済み。`input_tokens` は状態と仮説のトークン数、`output_tokens` は 0 を返す |
+| モデル一覧 (SDK の `client.models.list()`) | 対応済み。`GET /v1/models` (SDK のソースで確認) |
+| エラー (`422`、`429` など) | 対応済み。`422` (検証エラー) は同じ形 (`{"detail": [{loc, msg, type}]}`。SDK の OpenAPI スキーマで確認) で返す。認証はなし (`Authorization` ヘッダーは無視する) |
 
 型名は `noul` にそろえた (以前の `bool` も読める)。回答の形と `{option}` テンプレートは、
 上の形 (`{"type": "noul", "noul": p}`、`criteria`) に寄せる。
 古い形式の YAML (`examples/*.yaml`) は、読み込み時に変換して受け付ける。
 
-**開発 PC でできる** (torch の GPU と OpenVINO の CPU で動かす)
+**開発 PC でできる** (torch の GPU と OpenVINO の CPU で動かす) — 比較を除いて完了。結果は [phase6-results.md](phase6-results.md)
 
-- [ ] `src/local_decision_model/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込み
+- [x] `src/local_decision_model/server.py` (新規): FastAPI の薄いサーバー。起動時にモデルを読み込み
       (OpenVINO ならコンパイルもする)、リクエストは 1 本のワーカーで順番に処理する。`decide.py` をそのまま呼ぶ
-- [ ] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --backend torch --device cuda`)。
+- [x] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --backend torch --device cuda`)。
       バックエンドとデバイスは `decide` と同じ引数で選ぶ。既定は localhost のみで待ち受け、外部には公開しない
-- [ ] `/health` (状態確認) を足す。起動直後のコンパイル中は「準備中」を返す
-- [ ] テスト: TypeSafe のドキュメントにあるリクエスト例をそのまま送り、同じ形の回答が返ること。
+- [x] `/health` (状態確認) を足す。起動直後のコンパイル中は「準備中」を返す
+- [x] テスト: TypeSafe のドキュメントにあるリクエスト例をそのまま送り、同じ形の回答が返ること。
       公式の Python SDK で `base_url` をこのサーバーに向けて呼べること
-- [ ] `.workshop/*.yaml` と `scripts/npu.ps1` に `serve` の action を足す
+- [x] `.workshop/*.yaml` と `scripts/npu.ps1` に `serve` の action を足す
 - [ ] (比較) Ollaya など TypeSafe 互換のローカルサーバーで小型の LLM 判断モデルを動かし、同じリクエストで
       精度と速さを比べる
 

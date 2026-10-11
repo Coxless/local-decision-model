@@ -37,12 +37,15 @@ def make_scorer(args):
         from .torch_backend import TorchScorer
 
         return TorchScorer(model, args.device, config.max_length), config
-    from .openvino_backend import OpenVINOScorer
+    from .openvino_backend import OpenVINOPackedScorer, OpenVINOScorer
 
     model = args.model or DEFAULT_IR_DIR
     config = InferenceConfig.load(model)
-    if (args.arch or config.arch) == "packed":
-        raise SystemExit("パック方式の OpenVINO 推論は未対応です (フェーズ 4)")
+    if args.arch and args.arch != config.arch:
+        # IR は方式ごとに別のグラフなので、読み込むときには変えられない
+        raise SystemExit(f"{model} は {config.arch} の IR です。--arch では変えられません")
+    if config.arch == "packed":
+        return OpenVINOPackedScorer(model, args.device, config), config
     return OpenVINOScorer(model, args.device, args.batch_size), config
 
 
@@ -89,21 +92,24 @@ def cmd_decide(args) -> None:
 
 
 def cmd_bench(args) -> None:
-    state, questions = load_request(args.request)
     decider = make_decider(args)
-    for _ in range(args.warmup):
-        decider.decide(state, questions)
-    times = []
-    for _ in range(args.runs):
-        start = time.perf_counter()
-        decider.decide(state, questions)
-        times.append((time.perf_counter() - start) * 1000)
-    times.sort()
-    print(
-        f"{args.backend}/{args.device}  runs={args.runs}  "
-        f"p50={statistics.median(times):.2f}ms  p95={times[int(0.95 * (len(times) - 1))]:.2f}ms  "
-        f"min={times[0]:.2f}ms"
-    )
+    for path in args.request:
+        state, questions = load_request(path)
+        # パック方式の OpenVINO は、系列長ごとの最初の推論でコンパイルする。warmup に含める
+        for _ in range(args.warmup):
+            decider.decide(state, questions)
+        times = []
+        for _ in range(args.runs):
+            start = time.perf_counter()
+            decider.decide(state, questions)
+            times.append((time.perf_counter() - start) * 1000)
+        times.sort()
+        print(
+            f"{path}  {args.backend}/{args.device}  runs={args.runs}  "
+            f"p50={statistics.median(times):.2f}ms  "
+            f"p95={times[int(0.95 * (len(times) - 1))]:.2f}ms  min={times[0]:.2f}ms",
+            flush=True,
+        )
 
 
 def cmd_distill(args) -> None:
@@ -177,7 +183,9 @@ def main(argv: list[str] | None = None) -> None:
             help=f"torch: HF ID か学習済みディレクトリ (既定 {DEFAULT_BASE_MODEL}), "
             f"openvino: IR ディレクトリ (既定 {DEFAULT_IR_DIR})",
         )
-        s.add_argument("--batch-size", type=int, default=8, help="openvino の静的バッチサイズ")
+        s.add_argument(
+            "--batch-size", type=int, default=8, help="openvino のペア方式の静的バッチサイズ"
+        )
         s.add_argument(
             "--arch",
             choices=["pair", "packed"],
@@ -189,7 +197,11 @@ def main(argv: list[str] | None = None) -> None:
         ("bench", cmd_bench, "レイテンシを計測する"),
     ]:
         s = sub.add_parser(name, help=help_)
-        s.add_argument("request", nargs="?", default="examples/review.yaml")
+        if name == "bench":
+            # 複数のリクエストを渡すと、モデルを読み込んだまま順に測る (例: examples/bench/*.yaml)
+            s.add_argument("request", nargs="*", default=["examples/review.yaml"])
+        else:
+            s.add_argument("request", nargs="?", default="examples/review.yaml")
         add_model_arguments(s)
         s.set_defaults(func=func)
         if name == "bench":

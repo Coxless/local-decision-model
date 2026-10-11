@@ -44,7 +44,7 @@ concepts:
     layer: interface
     definition: 1 つの状態と、名前付きの質問の集まり。1 回の decide の入力。
     code: [local_decision_model.cli.load_request]
-    files: [examples/review.yaml]
+    files: [examples/review.yaml, examples/bench/]
     external: {typesafe: "POST /v1/systemone の本文 (state / model / questions)"}
 
   state:
@@ -254,8 +254,9 @@ concepts:
     code:
       - local_decision_model.scoring.QuestionScorer
       - local_decision_model.torch_backend.TorchPackedScorer
+      - local_decision_model.openvino_backend.OpenVINOPackedScorer
       - local_decision_model.packed_model.PackedModel
-    note: OpenVINO での推論とエクスポートは未実装 (フェーズ 4)。
+    note: OpenVINO では CPU で確認済み。NPU での動作は未確認 (NPU PC が要る)。
 
   scorer:
     ja: scorer
@@ -318,7 +319,12 @@ concepts:
     layer: inference
     definition: OpenVINO の中間表現 (model.xml)。開発 PC でエクスポートし、NPU PC に転送して使う。
     relations: {part_of: [model_dir]}
-    code: [local_decision_model.export.export, local_decision_model.openvino_backend.IR_FILE]
+    code:
+      - local_decision_model.export.export
+      - local_decision_model.export.convert_packed
+      - local_decision_model.openvino_backend.IR_FILE
+    files: [scripts/phase4/ir_ops.py]
+    note: パック方式の IR は、役割埋め込み、見える範囲と相対位置の計算、判断ロジットへの変換までを含む。
 
   # ------------------------------------------------------------------ packing
   pack:
@@ -410,7 +416,8 @@ concepts:
     en: sequence length
     layer: packing
     definition: 入力の固定長。NPU は動的形状が苦手なので、ペア方式は max_length、パック方式は lengths のうち収まる最短を使う。
-    code: [local_decision_model.scoring.InferenceConfig]
+    code: [local_decision_model.scoring.InferenceConfig, local_decision_model.openvino_backend.OpenVINOPackedScorer]
+    note: パック方式の OpenVINO は、系列長ごとに静的な形状でコンパイルする (初めて使うときに行う)。
 
   # ----------------------------------------------------------------- training
   example:
@@ -528,7 +535,13 @@ concepts:
     en: phase
     layer: environment
     definition: プランの作業の区切り (0〜6)。結果は docs/phaseN-results.md に書く。
-    files: [docs/plan.md, docs/phase0-results.md, docs/phase1-results.md, docs/phase2-results.md, docs/phase3-results.md]
+    files:
+      - docs/plan.md
+      - docs/phase0-results.md
+      - docs/phase1-results.md
+      - docs/phase2-results.md
+      - docs/phase3-results.md
+      - docs/phase4-results.md
 
   system_one:
     ja: System One

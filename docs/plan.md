@@ -6,6 +6,25 @@ jev の「構造化出力専用の仕組み」と「較正された確率」を�
 ローカル (Intel NPU) で高速に動く判断モデルを作る。ベースは
 [`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7)。
 
+## 進め方 (2026-10-11 に見直し)
+
+NPU PC がまだ手元にないので、**開発 PC だけでできる作業を先に終わらせる**。開発 PC で使えるのは
+torch の GPU (cuda) と OpenVINO の CPU。NPU PC が要る作業は、各フェーズの「NPU PC が要る」に分けて後回しにする。
+フェーズの番号は変えず、進める順番だけを変える。
+
+| 順番 | 作業 | 先にやる理由 |
+|---|---|---|
+| 1 (完了) | フェーズ 4 の開発 PC 分 (パック方式のエクスポート、OpenVINO の CPU での推論、torch との一致) | NPU 向けの形 (固定長、静的な形状) にするところまでは NPU なしでできる。NPU PC が来たら、転送して測るだけになる |
+| 2 | フェーズ 6 のサーバー (torch の GPU と OpenVINO の CPU で動かす) | API の層はバックエンドによらない。NPU で動かなくても作り直しにならず、開発 PC でアプリから使い始められる |
+| 3 | 精度の確認 (フェーズ 3 の持ち越し) | 学習にない質問での正解率と、弱い質問。評価セットを人が見直す作業は、いったん見送る |
+| 4 | フェーズ 5 の開発 PC 分 (保留の判定、README、INT8 の精度の確認) | INT8 の速さは NPU でしか分からないので、最後に回す |
+| 5 | NPU PC が要る作業 (フェーズ 0-b → 4 → 5 → 6 の順) | NPU PC が用意できてから |
+
+**リスク**: 「mDeBERTa が NPU で動くか」は確かめられないまま進むことになる。動かなかったときの判定は
+フェーズ 0-b のまま (NPU PC の内蔵 GPU で動かすか、ベースを変える)。内蔵 GPU で動かす場合は、ここまでの作業が
+そのまま使える。ベースを変える場合は `packed_model.py`、学習、エクスポートがやり直しになり、
+データ、評価セット、サーバーは残る。
+
 ## 前提 (確認済み)
 
 - transformers 5.18 の DeBERTa-v2 は、エンコーダに 3 次元のアテンションマスク `[B, L, L]` と
@@ -90,7 +109,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
       疑問文のまま zero-shot でどれだけ精度が落ちるかを測る
 - [x] Git のリモートを用意して push する。`.gitattributes` と `scripts/npu.ps1` もここで作る
 
-**0-b. NPU PC (Windows, uv をそのまま使う)**
+**0-b. NPU PC (Windows, uv をそのまま使う)** — 後回し (NPU PC が用意できてから)
 
 モデルは Hugging Face Hub の private リポジトリ
 `Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov` 経由で渡す
@@ -190,28 +209,50 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 **合格ライン**: 評価セットで、同じ学習データで学習したペア方式との正解率の差が 1〜2 ポイント以内、
 ECE はペア方式と同等以下。結果は noul が −0.3 ポイント、choice が +0.5 ポイントで、ECE も同じ水準。
 
+**持ち越し (精度の確認)**: どれも開発 PC でできる。詳しくは [phase3-results.md](phase3-results.md) の「残っていること」。
+
+- [ ] 評価セット (`data/eval-draft.jsonl`) を人が見直す。フェーズ 3 の正解率は「Opus と同じ判定になる割合」のまま。
+      いったん見送り (2026-10-11 に決定)。当面は Opus の下書きのまま評価に使う
+- [ ] 学習にない質問での正解率を測る (未決事項 8)。質問の文を変えたとき、別の分野の質問のときにどうなるか
+- [ ] 弱い質問 (`staff`、`angry` など) のラベルを見直すか、真の例を足す
+
 ## フェーズ 4: エクスポートと NPU 推論
 
-- [ ] `export.py`: パック方式のモデルを OpenVINO IR に変換する
-      (入力は `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index`、出力は `logits[1, M]`)
-- [ ] `openvino_backend.py`: 長さ 128 / 256 / 512 の 3 種類をコンパイルしてキャッシュし、
-      入力に収まる一番短いものを選ぶ
-- [ ] テスト: 同じ入力に対して torch の CPU と OpenVINO の CPU で結果が一致すること
-- [ ] `bench` を拡張する: 質問 1 / 3 / 10 個、choice の選択肢 20 個の各条件で、
-      ペア方式とパック方式の速さを NPU / GPU / CPU で比べる
-- [ ] 開発 PC で、GPU (torch) と CPU (OpenVINO) の両方で動作確認してから IR を NPU PC に転送する
+**開発 PC でできる** — IR を上げる作業を除いて完了。結果は [phase4-results.md](phase4-results.md)
+
+- [x] `export.py`: パック方式のモデルを OpenVINO IR に変換する
+      (入力は `input_ids`、`question_ids`、`option_ids`、`positions`、`marker_index`、出力は `decision_logits[1, M]`)
+- [x] `openvino_backend.py`: 長さ 128 / 256 / 512 の 3 種類をコンパイルしてキャッシュし、
+      入力に収まる一番短いものを選ぶ。CPU でも NPU と同じ静的な形状でコンパイルして動かす
+- [x] テスト: 同じ入力に対して torch の CPU と OpenVINO の CPU で結果が一致すること
+- [x] IR に含まれる演算の種類を一覧にして記録する (NPU で動かなかったときに、原因の演算を探す手がかりにする)
+- [x] `bench` を拡張する: 質問 1 / 3 / 10 個、choice の選択肢 20 個の各条件で、
+      ペア方式とパック方式の速さを比べる。開発 PC では torch の GPU と OpenVINO の CPU で測る
+- [x] GPU (torch) と CPU (OpenVINO) の両方で動作確認し、評価セットの指標が torch と変わらないことを確かめる
+- [ ] IR を Hugging Face Hub の `Coxless/local-decision-model` に上げる
+
+**NPU PC が要る**
+
 - [ ] NPU PC (Windows) で `git pull` → `scripts\npu.ps1 test` → `decide` → `bench` を行い、
       NPU の出力が開発 PC の OpenVINO CPU の出力と (許容誤差内で) 一致することを確認する
+- [ ] `bench` の同じ条件を NPU / 内蔵 GPU / CPU で測る
 
 ## フェーズ 5: 高速化と仕上げ
 
-- [ ] NNCF で INT8 に量子化する。較正には学習データの一部を使い、量子化前後で ECE と正解率が
-      悪化していないか確認する
+**開発 PC でできる**
+
 - [ ] 保留の判定: 確率がしきい値未満の質問を「要確認」として返すオプションを付ける
 - [ ] (任意) 型の追加: 複数選択 (選択肢ごとに sigmoid)、数値 (区間に分けた choice)
 - [ ] README と `.workshop/*.yaml` の actions を更新する
-      (`train --arch packed` と `evaluate` はフェーズ 3、`distill` はフェーズ 2 で追加済み)。
-      README に Windows の NPU PC の手順 (ドライバ確認、uv、`scripts/npu.ps1`、モデルの転送) を追加する
+      (`train --arch packed` と `evaluate` はフェーズ 3、`distill` はフェーズ 2 で追加済み)
+- [ ] NNCF で INT8 に量子化する。較正には学習データの一部を使い、量子化前後で ECE と正解率が
+      悪化していないかを OpenVINO の CPU で確認する
+
+**NPU PC が要る**
+
+- [ ] INT8 の IR が NPU でコンパイルできるか、どれだけ速くなるかを測る
+- [ ] README に Windows の NPU PC の手順 (ドライバ確認、uv、`scripts/npu.ps1`、モデルの転送) を追加する
+      (実際に動かして確かめた手順を書く)
 
 ## フェーズ 6: ローカルサーバー (アプリから使えるようにする)
 
@@ -246,17 +287,23 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 上の形 (`{"type": "noul", "noul": p}`、`criteria`) に寄せる。
 古い形式の YAML (`examples/*.yaml`) は、読み込み時に変換して受け付ける。
 
-- [ ] `src/local_decision_model/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込んで
-      NPU でコンパイルし、リクエストは 1 本のワーカーで順番に処理する。`decide.py` をそのまま呼ぶ
-- [ ] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --device NPU`)。
-      既定は localhost のみで待ち受け、外部には公開しない
+**開発 PC でできる** (torch の GPU と OpenVINO の CPU で動かす)
+
+- [ ] `src/local_decision_model/server.py` (新規): 標準ライブラリか FastAPI の薄いサーバー。起動時にモデルを読み込み
+      (OpenVINO ならコンパイルもする)、リクエストは 1 本のワーカーで順番に処理する。`decide.py` をそのまま呼ぶ
+- [ ] CLI に `serve` を追加する (`--host 127.0.0.1 --port <番号> --model models/... --backend torch --device cuda`)。
+      バックエンドとデバイスは `decide` と同じ引数で選ぶ。既定は localhost のみで待ち受け、外部には公開しない
 - [ ] `/health` (状態確認) を足す。起動直後のコンパイル中は「準備中」を返す
 - [ ] テスト: TypeSafe のドキュメントにあるリクエスト例をそのまま送り、同じ形の回答が返ること。
       公式の Python SDK で `base_url` をこのサーバーに向けて呼べること
-- [ ] Windows: `scripts\npu.ps1 serve` で起動する。必要になったら、スタートアップへの登録や
-      Windows サービス化を検討する。`.workshop/*.yaml` にも `serve` の action を足す
+- [ ] `.workshop/*.yaml` と `scripts/npu.ps1` に `serve` の action を足す
 - [ ] (比較) Ollaya など TypeSafe 互換のローカルサーバーで小型の LLM 判断モデルを動かし、同じリクエストで
       精度と速さを比べる
+
+**NPU PC が要る**
+
+- [ ] Windows: `scripts\npu.ps1 serve --device NPU` で起動して動作を確かめる。必要になったら、スタートアップへの登録や
+      Windows サービス化を検討する
 - [ ] (任意) 配布しやすくしたくなったら、サーバーを Rust (OpenVINO の Rust バインディング + `tokenizers`)
       の exe に置き換える。API が同じなのでアプリ側は変えなくてよい
 
@@ -265,6 +312,7 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 1. **対象の分野**: 問い合わせ (顧客からの問い合わせ文) にする (2026-10-03 に決定)。
 2. **フェーズ 0 の結果**: NPU での速さは開発 PC では測れない。NPU PC が手元にないため、0-b は後回しにして
    フェーズ 1 を先に進めた。NPU で動かない場合は `packed_model.py` を作り直す。
+   2026-10-11 に、NPU PC が要る作業をすべて後回しにして、開発 PC でできる作業を先に進めることにした (「進め方」を参照)。
 3. **モデルの転送方法**: Hugging Face Hub の private リポジトリにする (2026-10-06 に決定)。
    ベースモデルを変換しただけの IR は `Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov`、
    自分で学習したモデルは別のリポジトリ `Coxless/local-decision-model` に分け、公開するかどうかを別々に決められるようにする。

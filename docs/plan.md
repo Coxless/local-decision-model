@@ -30,8 +30,8 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 ```
 
 - Git のリモートは `github.com/Coxless/local-decision-model` (現在は public)。
-- `models/` は `.gitignore` 済み。NPU PC への転送は `scp` (Windows 標準の OpenSSH で受けられる)、
-  共有フォルダ、zip のどれかで行う。IR は数百 MB なので Git には入れない。
+- `models/` は `.gitignore` 済み。NPU PC への転送は Hugging Face Hub の private リポジトリで行う
+  (`hf` action。手順はフェーズ 0-b)。IR は数百 MB なので Git には入れない。
 
 ### Windows の NPU PC でワークショップの代わりにどうするか
 
@@ -44,7 +44,7 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
   (`winget install astral-sh.uv`)。Python は uv が `requires-python` に合わせて自動で入れる。
 - `npu.yaml` の actions と同じことをする `scripts/npu.ps1` を作る。
   使い方: `powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 bench --device NPU`
-  - actions は `setup` / `check` / `test` / `decide` / `bench` (`npu.yaml` と同じ名前と引数)
+  - actions は `setup` / `check` / `test` / `decide` / `bench` / `hf` (`npu.yaml` と同じ名前と引数)
   - ワークショップの環境変数に合わせて、`HF_HOME=.cache\huggingface` をスクリプト内で設定する
   - venv はプロジェクト内の `.venv` を使う (uv の既定)
   - `check` は `/dev/accel` の代わりに、OpenVINO のデバイス一覧に `NPU` があるかを確認する
@@ -92,8 +92,24 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
 
 **0-b. NPU PC (Windows, uv をそのまま使う)**
 
+モデルは Hugging Face Hub の private リポジトリ
+`Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov` 経由で渡す
+(0-a で作った `models/mdeberta-ov`。ベースモデルを IR に変換しただけで、学習した重みは入っていない)。
+`scripts\npu.ps1` は `powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 <action>` で実行する。
+
+- [ ] (開発 PC) IR を上げる:
+      `workshop run gpu -- hf auth login` →
+      `workshop run gpu -- hf upload Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov models/mdeberta-ov . --private`
 - [ ] `git clone` → `scripts\npu.ps1 setup` → `check` で、OpenVINO のデバイス一覧に NPU が出るか確認する
-- [ ] 0-a で作った IR を `models/` に転送し、`decide` と `bench` を NPU / GPU / CPU で比べる
+- [ ] IR を取得する: `scripts\npu.ps1 hf auth login` (read 権限のトークン) →
+      `scripts\npu.ps1 hf download Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov --local-dir models\mdeberta-ov`
+- [ ] 1×512 用のモデルディレクトリを作る: `models\mdeberta-ov` を `models\mdeberta-ov-512` にコピーし、
+      `s1.json` の `max_length` を 512 に書き換える
+- [ ] `decide` と `bench` を NPU / GPU / CPU で比べる:
+      `scripts\npu.ps1 decide --model models\mdeberta-ov`、
+      `scripts\npu.ps1 bench --model models\mdeberta-ov --device NPU`、
+      `scripts\npu.ps1 bench --model models\mdeberta-ov-512 --batch-size 1 --device NPU`
+      (基準は開発 PC の OpenVINO CPU の p50: 8×256 が 1,253 ms、1×512 が 1,841 ms)
 - [ ] トークナイザ (sentencepiece) が Windows でも読めるか確認する
 - [ ] NPU のコンパイルにかかる時間と、`.cache/openvino` のキャッシュが効くかを確認する
 
@@ -249,8 +265,9 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
 1. **対象の分野**: 問い合わせ (顧客からの問い合わせ文) にする (2026-10-03 に決定)。
 2. **フェーズ 0 の結果**: NPU での速さは開発 PC では測れない。NPU PC が手元にないため、0-b は後回しにして
    フェーズ 1 を先に進めた。NPU で動かない場合は `packed_model.py` を作り直す。
-3. **モデルの転送方法**: `scp`、共有フォルダ、zip のどれにするか。何度も転送するようなら、
-   Hugging Face Hub の private リポジトリに置いて NPU PC から取得する方法も検討する。
+3. **モデルの転送方法**: Hugging Face Hub の private リポジトリにする (2026-10-06 に決定)。
+   ベースモデルを変換しただけの IR は `Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov`、
+   自分で学習したモデルは別のリポジトリ `Coxless/local-decision-model` に分け、公開するかどうかを別々に決められるようにする。
 4. **Windows の NPU ドライバのバージョン**: OpenVINO の NPU プラグインは、ドライバ側のコンパイラに
    依存する。Windows のドライバのバージョンを記録し、動かなければ更新する。
 5. **サーバーのポート番号と起動方法**: Ollama (11434) などとぶつからない番号にする。

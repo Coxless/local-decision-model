@@ -64,3 +64,10 @@ actions:
   bench: |
     cd /project
     uv run python -m local_decision_model bench --backend torch --device cuda "$@"
+
+  # Hugging Face Hub の CLI (transformers と一緒に入る)。モデルディレクトリの転送に使う。
+  # 例: workshop run gpu -- hf auth login
+  #     workshop run gpu -- hf upload <ユーザー名>/local-decision-model models/packed packed --private
+  hf: |
+    cd /project
+    uv run hf "$@"

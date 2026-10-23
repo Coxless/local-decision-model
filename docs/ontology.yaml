@@ -285,7 +285,8 @@ concepts:
       - local_decision_model.torch_backend.TorchPackedScorer
       - local_decision_model.openvino_backend.OpenVINOPackedScorer
       - local_decision_model.packed_model.PackedModel
-    note: OpenVINO では CPU で確認済み。NPU での動作は未確認 (NPU PC が要る)。
+    note: OpenVINO では CPU、内蔵 GPU、NPU で確認済み。
+      NPU は系列長 128 と 512 だけで動く (160〜480 はドライバがハングする。phase4-results.md の 4 節)。
 
   scorer:
     ja: scorer

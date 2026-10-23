@@ -109,28 +109,26 @@ NPU PC:  git clone / pull → setup → check → decide / bench (NPU / GPU / CP
       疑問文のまま zero-shot でどれだけ精度が落ちるかを測る
 - [x] Git のリモートを用意して push する。`.gitattributes` と `scripts/npu.ps1` もここで作る
 
-**0-b. NPU PC (Windows, uv をそのまま使う)** — 後回し (NPU PC が用意できてから)
+**0-b. NPU PC (Windows, uv をそのまま使う)** — 環境づくりは完了 (2026-10-24)。
+パック方式の IR での確認はフェーズ 4 にまとめた ([phase4-results.md](phase4-results.md) の 4 節)
 
-モデルは Hugging Face Hub の private リポジトリ
-`Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov` 経由で渡す
-(0-a で作った `models/mdeberta-ov`。ベースモデルを IR に変換しただけで、学習した重みは入っていない)。
+モデルは Hugging Face Hub の private リポジトリ経由で渡す。ベースモデルを変換しただけの IR は
+`Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov`、学習済みのパック方式の IR は
+`Coxless/local-decision-model` の `packed-ov/`。
 `scripts\npu.ps1` は `powershell -ExecutionPolicy Bypass -File scripts\npu.ps1 <action>` で実行する。
 
-- [ ] (開発 PC) IR を上げる:
-      `workshop run gpu -- hf auth login` →
-      `workshop run gpu -- hf upload Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov models/mdeberta-ov . --private`
-- [ ] `git clone` → `scripts\npu.ps1 setup` → `check` で、OpenVINO のデバイス一覧に NPU が出るか確認する
-- [ ] IR を取得する: `scripts\npu.ps1 hf auth login` (read 権限のトークン) →
-      `scripts\npu.ps1 hf download Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov --local-dir models\mdeberta-ov`
-- [ ] 1×512 用のモデルディレクトリを作る: `models\mdeberta-ov` を `models\mdeberta-ov-512` にコピーし、
-      `s1.json` の `max_length` を 512 に書き換える
-- [ ] `decide` と `bench` を NPU / GPU / CPU で比べる:
-      `scripts\npu.ps1 decide --model models\mdeberta-ov`、
-      `scripts\npu.ps1 bench --model models\mdeberta-ov --device NPU`、
-      `scripts\npu.ps1 bench --model models\mdeberta-ov-512 --batch-size 1 --device NPU`
+- [x] (開発 PC) IR を上げる (両方のリポジトリに上がっている)
+- [x] `git clone` → `scripts\npu.ps1 setup` → `check` で、OpenVINO のデバイス一覧に NPU が出るか確認する
+      (`.python-version` で Python を 3.13 に固定しないと、uv が 3.15 を選んで openvino が入らない)
+- [x] IR を取得する: `scripts\npu.ps1 hf auth login` (read 権限のトークン) →
+      `scripts\npu.ps1 hf download Coxless/local-decision-model --include "packed-ov/*" --local-dir models`
+      (ベースモデルのペア方式ではなく、学習済みのパック方式の IR を先に試した)
+- [x] トークナイザ (sentencepiece) が Windows でも読めるか確認する
+- [x] NPU のコンパイルにかかる時間と、`.cache/openvino` のキャッシュが効くかを確認する
+      (L=128 の初回 35 秒 → キャッシュがある起動は 4.5 秒。L=512 の初回コンパイルは 65 秒)
+- [ ] ベースモデルのペア方式の IR (8×256、1×512) でも測る。
+      系列長 160〜480 で NPU がハングする問題がパック方式固有かどうかの切り分けにもなる
       (基準は開発 PC の OpenVINO CPU の p50: 8×256 が 1,253 ms、1×512 が 1,841 ms)
-- [ ] トークナイザ (sentencepiece) が Windows でも読めるか確認する
-- [ ] NPU のコンパイルにかかる時間と、`.cache/openvino` のキャッシュが効くかを確認する
 
 **判定**: NPU で動かない、または極端に遅い場合は、NPU PC の内蔵 GPU で動かすか、
 ベースを XLM-R 系 (MiniLM) に変える。後者は位置の振り直しが DeBERTa 固有なので作り直しが必要。
@@ -231,11 +229,15 @@ ECE はペア方式と同等以下。結果は noul が −0.3 ポイント、ch
 - [x] GPU (torch) と CPU (OpenVINO) の両方で動作確認し、評価セットの指標が torch と変わらないことを確かめる
 - [x] IR を Hugging Face Hub の `Coxless/local-decision-model` に上げる
 
-**NPU PC が要る**
+**NPU PC が要る** — 完了。結果は [phase4-results.md](phase4-results.md) の 4 節
 
-- [ ] NPU PC (Windows) で `git pull` → `scripts\npu.ps1 test` → `decide` → `bench` を行い、
-      NPU の出力が開発 PC の OpenVINO CPU の出力と (許容誤差内で) 一致することを確認する
-- [ ] `bench` の同じ条件を NPU / 内蔵 GPU / CPU で測る
+- [x] NPU PC (Windows) で `scripts\npu.ps1 test` → `decide` → `bench` を行い、
+      NPU の出力が OpenVINO の CPU の出力と (許容誤差内で) 一致することを確認する
+      (noul の確率の差は最大 0.0055)
+- [x] `bench` の同じ条件を NPU / 内蔵 GPU / CPU で測る (内蔵 GPU が NPU の 6〜7 倍速い)
+- [ ] 系列長 160〜480 で NPU がハングする (`ZE_RESULT_ERROR_DEVICE_LOST`)。
+      いまは `lengths` から 256 を外して避けている。ペア方式の IR でも再現するか、
+      ドライバの更新で直るかを確かめる
 
 ## フェーズ 5: 高速化と仕上げ
 
@@ -317,7 +319,8 @@ TypeSafe の公式 SDK も、`base_url` 引数 (環境変数 `TYPESAFE_BASE_URL`
    ベースモデルを変換しただけの IR は `Coxless/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7-fp16-ov`、
    自分で学習したモデルは別のリポジトリ `Coxless/local-decision-model` に分け、公開するかどうかを別々に決められるようにする。
 4. **Windows の NPU ドライバのバージョン**: OpenVINO の NPU プラグインは、ドライバ側のコンパイラに
-   依存する。Windows のドライバのバージョンを記録し、動かなければ更新する。
+   依存する。2026-10-24 に確認したのは 32.0.100.5540 (2026-08-20 版、OpenVINO 2026.4.1、Core Ultra 5 125H)。
+   この組み合わせでは系列長 160〜480 でハングするので、更新して直るかを確かめる。
 5. **サーバーのポート番号と起動方法**: Ollama (11434) などとぶつからない番号にする。
    常駐の方法 (手動起動、スタートアップ、Windows サービス) は、使うアプリが決まってから決める。
 6. **疑問文の instructions への対応**: 学習データの質問を jev と同じ疑問文で書いて学習させるか、

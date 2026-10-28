@@ -198,7 +198,7 @@ concepts:
     definition: 届いた通知・メール・チャットを 1 件ずつサーバーで判定し、すぐ見るものと後でよいものに振り分けるアプリ。
     relations: {uses: [server, noul, choice, confidence]}
     files: [docs/triage.md, docs/npu-use-cases.md]
-    note: 最初に作るアプリの案。サーバーとは別のプログラムで、HTTP で呼ぶ。削除や返信はしない。
+    note: 最初に作るアプリの案。最初のソースは Windows の通知。サーバーとは別のプログラムで、HTTP で呼ぶ。削除や返信はしない。
 
   # ---------------------------------------------------------------- inference
   hypothesis:
